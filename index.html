@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChromaShock Arena (炫彩衝擊競技場)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            background-color: #000000; /* Pure black background for visual contrast */
+            color: #FFFFFF; /* Default text color */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            background-color: #050515; /* Very dark navy for space background */
+            border: 2px solid #00FFFF; /* Cyan border */
+            box-shadow: 0 0 20px 5px rgba(0, 255, 255, 0.5); /* Cyan glow */
+        }
+
+        .ui-screen {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.85); /* Semi-transparent black */
+            border: 2px solid #00CCFF; /* Cyan border */
+            box-shadow: 0 0 25px 8px rgba(0, 204, 255, 0.6); /* Stronger cyan glow */
+            padding: 30px 40px;
+            text-align: center;
+            border-radius: 10px;
+            max-width: 90%;
+            display: none; /* Hidden by default */
+            z-index: 1000; /* Ensure UI is on top */
+        }
+
+        .ui-screen h1, .ui-screen h2 {
+            color: #00FFFF; /* Bright cyan for titles */
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #00FFFF;
+        }
+
+        .ui-screen p {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+
+        .ui-screen button {
+            background-color: #00CCFF; /* Cyan button */
+            color: #000000; /* Black text */
+            border: none;
+            padding: 12px 25px;
+            margin: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            box-shadow: 0 0 10px rgba(0, 204, 255, 0.5);
+        }
+
+        .ui-screen button:hover {
+            background-color: #00FFFF; /* Lighter cyan on hover */
+            transform: translateY(-2px);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.7);
+        }
+
+        .ui-screen button:active {
+            transform: translateY(0);
+        }
+
+        /* HUD Overlay */
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allow mouse events to pass through to canvas */
+            display: none; /* Hidden by default */
+        }
+
+        #score-display, #wave-display, #health-bar-container {
+            position: absolute;
+            color: #FFFFFF;
+            font-size: 1.5em;
+            text-shadow: 0 0 5px #00FFFF;
+        }
+
+        #score-display { top: 20px; left: 20px; }
+        #wave-display { top: 60px; left: 20px; }
+
+        #health-bar-container {
+            top: 100px;
+            left: 20px;
+            width: 200px; /* Fixed width for health bar */
+            height: 20px;
+            background-color: rgba(255, 0, 255, 0.3); /* Magenta transparent background */
+            border: 2px solid #FF00FF; /* Magenta border */
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 0 8px rgba(255, 0, 255, 0.5);
+        }
+
+        #health-bar {
+            height: 100%;
+            width: 100%; /* Will be updated by JS */
+            background-color: #00FFFF; /* Cyan fill */
+            transition: width 0.1s linear; /* Smooth health change */
+            box-shadow: 0 0 5px #00FFFF;
+        }
+
+        #skill-hud {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 15px;
+        }
+
+        .skill-icon {
+            width: 60px;
+            height: 60px;
+            border: 2px solid #00FFFF;
+            border-radius: 8px;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            font-weight: bold;
+            color: #00FFFF;
+            position: relative;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        .skill-cooldown {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2em;
+            color: #FFFFFF;
+            text-shadow: 0 0 5px #FFFFFF;
+            pointer-events: none;
+        }
+
+        .skill-icon.ready {
+            box-shadow: 0 0 15px #00FFFF, 0 0 25px rgba(0, 255, 255, 0.7);
+        }
+
+        /* Upgrade Screen */
+        #upgrade-screen h2 {
+            color: #00FFFF;
+            margin-bottom: 20px;
+            text-shadow: 0 0 8px #00FFFF;
+        }
+
+        #current-money {
+            color: #FFFF00;
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            text-shadow: 0 0 8px #FFFF00;
+        }
+
+        #upgrade-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 10px; /* For scrollbar */
+        }
+
+        .upgrade-item {
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 1px solid #00CCFF;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            box-shadow: 0 0 10px rgba(0, 204, 255, 0.3);
+            position: relative;
+        }
+
+        .upgrade-item h4 {
+            color: #FF00FF; /* Magenta for category */
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-size: 1.1em;
+        }
+        .upgrade-item h3 {
+            color: #FFFF00; /* Yellow for item name */
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 1.3em;
+        }
+
+        .upgrade-item p {
+            font-size: 0.9em;
+            line-height: 1.4;
+            color: #CCC;
+            margin-bottom: 10px;
+        }
+
+        .upgrade-item .level-info {
+            font-weight: bold;
+            color: #00FFFF;
+            margin-bottom: 5px;
+        }
+
+        .upgrade-item .cost-info {
+            font-weight: bold;
+            color: #FFFF00;
+            margin-bottom: 10px;
+        }
+        .upgrade-item button {
+            width: calc(100% - 20px); /* Adjust for padding */
+            font-size: 0.95em;
+            margin: 5px 0 0 0;
+        }
+        .upgrade-item button:disabled {
+            background-color: rgba(0, 204, 255, 0.3);
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        /* Game Over Screen & Pause Screen*/
+        #game-over-menu h2, #pause-menu h2 {
+            color: #FF00FF; /* Magenta */
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #FF00FF;
+        }
+
+        #game-over-menu p {
+            color: #FF00FF; /* Magenta for stats */
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="ui-screen">
+        <h1>ChromaShock Arena</h1>
+        <p>歡迎來到炫彩衝擊競技場！</p>
+        <button id="start-game-btn">開始遊戲</button>
+        <button id="upgrades-btn">永久升級</button>
+        <p id="high-score-display">最高分數：0</p>
+    </div>
+
+    <!-- Upgrade Screen -->
+    <div id="upgrade-screen" class="ui-screen">
+        <h2>永久升級</h2>
+        <p id="current-money">金錢：0</p>
+        <div id="upgrade-list">
+            <!-- Upgrade items will be dynamically inserted here -->
+        </div>
+        <button id="back-from-upgrades-btn">返回</button>
+    </div>
+
+    <!-- Game Over Menu -->
+    <div id="game-over-menu" class="ui-screen">
+        <h2>遊戲結束！</h2>
+        <p>本局得分：<span id="final-score">0</span></p>
+        <p>最高波次：<span id="final-wave">0</span></p>
+        <p>獲得金錢：<span id="gained-money">0</span></p>
+        <button id="return-to-main-menu-btn">返回主選單</button>
+    </div>
+
+    <!-- Pause Menu -->
+    <div id="pause-menu" class="ui-screen">
+        <h2>遊戲暫停</h2>
+        <button id="resume-game-btn">繼續遊戲</button>
+        <button id="exit-game-btn">退出遊戲</button>
+    </div>
+
+    <!-- HUD Overlay (Always present when game is running) -->
+    <div id="ui-overlay">
+        <div id="score-display">分數：0</div>
+        <div id="wave-display">WAVE：1 | 剩餘敵人：0</div>
+        <div id="health-bar-container">
+            <div id="health-bar"></div>
+        </div>
+        <div id="skill-hud">
+            <div id="skill-q" class="skill-icon ready">Q<div class="skill-cooldown" style="display: none;"></div></div>
+            <div id="skill-e" class="skill-icon ready">E<div class="skill-cooldown" style="display: none;"></div></div>
+            <div id="skill-right-click" class="skill-icon ready">RMB<div class="skill-cooldown" style="display: none;"></div></div>
+        </div>
+    </div>
+
+    <script>
+        // === Constants and Game Configuration ===
+        const CANVAS_WIDTH = 1200;
+        const CANVAS_HEIGHT = 800;
+
+        const PLAYER_MAX_HEALTH_BASE = 100;
+        const PLAYER_MOVE_SPEED_BASE = 300; // pixels per second
+        const PLAYER_FIRE_RATE_BASE = 8; // shots per second
+        const PLAYER_BULLET_DAMAGE_BASE = 10;
+        const PLAYER_HEALTH_REGEN_BASE = 0.5; // health per second
+        const PLAYER_BULLETS_PER_SHOT_BASE = 1; // NEW: Base value for multi-shot
+
+        const SKILL_Q_DAMAGE_BASE = 40;
+        const SKILL_Q_TARGETS_BASE = 4;
+        const SKILL_Q_COOLDOWN = 8; // seconds
+
+        const SKILL_E_DAMAGE_BASE = 20;
+        const SKILL_E_RADIUS_BASE = 200;
+        const SKILL_E_KNOCKBACK_BASE = 50;
+        const SKILL_E_COOLDOWN = 6; // seconds
+
+        const SKILL_RMB_DAMAGE_BASE = 10; // damage per frame
+        const SKILL_RMB_DURATION_BASE = 300; // milliseconds
+        const SKILL_RMB_COOLDOWN = 10; // seconds
+
+        const BULLET_SPEED = 800; // pixels per second
+        const ENEMY_SPAWN_OFFSET = 50; // Spawn enemies this far off screen
+
+        const WAVE_INITIAL_ENEMY_COUNT = 8;
+        const WAVE_ENEMY_COUNT_PER_WAVE = 3;
+        const WAVE_ENEMY_HP_SCALING = 0.18; // 18% per wave after wave 1
+        const WAVE_ENEMY_SPEED_SCALING = 0.06; // 6% per wave after wave 1
+        const WAVE_SPAWN_INTERVAL_BASE = 500; // ms
+        const WAVE_SPAWN_INTERVAL_DECREASE = 20; // ms per wave
+        const WAVE_SPAWN_INTERVAL_MIN = 100; // ms
+
+        // --- Colors ---
+        const COLOR_PLAYER = '#00FFFF'; // Cyan
+        const COLOR_PLAYER_BULLET = '#00FFFF'; // Cyan
+        const COLOR_ENEMY_GRUNT = '#FF0000'; // Bright Red
+        const COLOR_ENEMY_SCOUT = '#FFFF00'; // Bright Yellow
+        const COLOR_ENEMY_BRUTE = '#FF00FF'; // Magenta
+        const COLOR_EXPLOSION_PARTICLE = ['#FF0000', '#FFA500', '#FFFF00', '#FF00FF']; // Red, Orange, Yellow, Magenta
+        const COLOR_SKILL_Q = '#CCFFFF'; // Light Cyan
+        const COLOR_SKILL_E_INNER = '#FFFFFF'; // White
+        const COLOR_SKILL_E_OUTER = '#FFA500'; // Orange
+        const COLOR_SKILL_RMB = '#FF00FF'; // Magenta
+        const COLOR_CROSSHAIR = '#FFFFFF'; // White for crosshair
+
+        // --- Permanent Upgrade Definitions ---
+        const UPGRADES_DEFINITION = {
+            'bulletDamage': {
+                category: '基礎', name: '子彈傷害', effect: '提升每顆子彈的傷害',
+                baseValue: PLAYER_BULLET_DAMAGE_BASE, increment: 2,
+                initialPrice: 50, priceFactor: 1.35
+            },
+            'fireRate': {
+                category: '基礎', name: '射擊頻率', effect: '提升每秒可發射的子彈數',
+                baseValue: PLAYER_FIRE_RATE_BASE, increment: 1.10, type: 'multiply',
+                initialPrice: 60, priceFactor: 1.4
+            },
+            'bulletsPerShot': { // NEW UPGRADE
+                category: '基礎', name: '多重射擊', effect: '每次射擊發射的子彈數量',
+                baseValue: PLAYER_BULLETS_PER_SHOT_BASE, increment: 1,
+                initialPrice: 75, priceFactor: 1.4 // Slightly more than damage, less than fire rate
+            },
+            'maxHealth': {
+                category: '基礎', name: '最大生命', effect: '提升生命值上限',
+                baseValue: PLAYER_MAX_HEALTH_BASE, increment: 25,
+                initialPrice: 70, priceFactor: 1.38
+            },
+            'healthRegen': {
+                category: '基礎', name: '生命恢復', effect: '提升每秒恢復的生命值',
+                baseValue: PLAYER_HEALTH_REGEN_BASE, increment: 0.3,
+                initialPrice: 90, priceFactor: 1.45
+            },
+            'moveSpeed': {
+                category: '基礎', name: '移動速度', effect: '提升飛船的移動速度',
+                baseValue: PLAYER_MOVE_SPEED_BASE, increment: 20,
+                initialPrice: 80, priceFactor: 1.3
+            },
+            'waveRadius': {
+                category: '波動 [E]', name: '半徑', effect: '增加波動攻擊的擴散半徑',
+                baseValue: SKILL_E_RADIUS_BASE, increment: 25,
+                initialPrice: 100, priceFactor: 1.42
+            },
+            'waveDamage': {
+                category: '波動 [E]', name: '傷害', effect: '增加波動攻擊的傷害',
+                baseValue: SKILL_E_DAMAGE_BASE, increment: 6,
+                initialPrice: 120, priceFactor: 1.48
+            },
+            'waveKnockback': {
+                category: '波動 [E]', name: '推力', effect: '增強波動對敵人的推開力度',
+                baseValue: SKILL_E_KNOCKBACK_BASE, increment: 15,
+                initialPrice: 90, priceFactor: 1.35
+            },
+            'lightningTargets': {
+                category: '閃電 [Q]', name: '目標數', effect: '增加閃電鏈可彈射的敵人數量',
+                baseValue: SKILL_Q_TARGETS_BASE, increment: 1,
+                initialPrice: 150, priceFactor: 1.5
+            },
+            'lightningDamage': {
+                category: '閃電 [Q]', name: '傷害', effect: '增加每次閃電的傷害',
+                baseValue: SKILL_Q_DAMAGE_BASE, increment: 12,
+                initialPrice: 180, priceFactor: 1.55
+            },
+            'laserDuration': {
+                category: '雷射 [右鍵]', name: '持續時間', effect: '增加雷射光束的持續時間',
+                baseValue: SKILL_RMB_DURATION_BASE, increment: 60,
+                initialPrice: 140, priceFactor: 1.52
+            },
+            'laserDamage': {
+                category: '雷射 [右鍵]', name: '傷害', effect: '增加雷射每幀造成的傷害',
+                baseValue: SKILL_RMB_DAMAGE_BASE, increment: 6,
+                initialPrice: 200, priceFactor: 1.6
+            }
+        };
+
+        // === Game State Variables ===
+        let canvas, ctx;
+        let animationFrameId;
+        let lastTime = 0;
+        let deltaTime = 0;
+
+        let gameRunning = false;
+        let gamePaused = false; // New: Game paused state
+        let currentScreen = 'main-menu';
+
+        let player;
+        let enemies = [];
+        let playerProjectiles = [];
+        let particles = [];
+        let lightningEffects = []; // For persistent lightning draws
+        let waveEffects = []; // For persistent wave draws
+
+        let currentScore = 0;
+        let currentWave = 1;
+        let enemiesInWave = 0;
+        let enemiesSpawnedThisWave = 0;
+        let lastEnemySpawnTime = 0;
+        let waveTextDisplayTime = 0;
+        const WAVE_TEXT_DURATION = 2000; // ms
+
+        // Permanent Player Data (stored in localStorage)
+        let playerMoney = 0;
+        let highScore = 0;
+        let playerUpgradeLevels = {}; // e.g., { 'bulletDamage': 1, 'fireRate': 0 }
+
+        // --- Mouse and Keyboard Input ---
+        const keys = {};
+        const mouse = { x: 0, y: 0, leftPressed: false, rightPressed: false };
+
+        // === DOM Elements ===
+        const mainMenu = document.getElementById('main-menu');
+        const upgradeScreen = document.getElementById('upgrade-screen');
+        const gameOverMenu = document.getElementById('game-over-menu');
+        const pauseMenu = document.getElementById('pause-menu'); // New: Pause menu element
+        const uiOverlay = document.getElementById('ui-overlay');
+
+        const startGameBtn = document.getElementById('start-game-btn');
+        const upgradesBtn = document.getElementById('upgrades-btn');
+        const highScoreDisplay = document.getElementById('high-score-display');
+
+        const currentMoneyDisplay = document.getElementById('current-money');
+        const upgradeListDiv = document.getElementById('upgrade-list');
+        const backFromUpgradesBtn = document.getElementById('back-from-upgrades-btn');
+
+        const finalScoreDisplay = document.getElementById('final-score');
+        const finalWaveDisplay = document.getElementById('final-wave');
+        const gainedMoneyDisplay = document.getElementById('gained-money');
+        const returnToMainMenuBtn = document.getElementById('return-to-main-menu-btn');
+
+        const resumeGameBtn = document.getElementById('resume-game-btn'); // New: Resume button
+        const exitGameBtn = document.getElementById('exit-game-btn');     // New: Exit button
+
+        const scoreDisplay = document.getElementById('score-display');
+        const waveDisplay = document.getElementById('wave-display');
+        const healthBar = document.getElementById('health-bar');
+        const skillQIcon = document.getElementById('skill-q');
+        const skillEIcon = document.getElementById('skill-e');
+        const skillRMBIcon = document.getElementById('skill-right-click');
+
+        // === Helper Functions ===
+
+        // Clamps a value between a min and max
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(value, max));
+        }
+
+        // Calculates distance between two points
+        function dist(x1, y1, x2, y2) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Object Pooling (simple version for projectiles/particles)
+        const pool = {
+            projectiles: [],
+            particles: [],
+            getProjectile() {
+                return this.projectiles.pop() || new Projectile(0,0,0,0,0,0);
+            },
+            returnProjectile(proj) {
+                this.projectiles.push(proj);
+            },
+            getParticle() {
+                return this.particles.pop() || new Particle(0,0,0,0,0,0,0,0);
+            },
+            returnParticle(part) {
+                this.particles.push(part);
+            }
+        };
+
+        // --- localStorage Management ---
+        function saveGame() {
+            const gameData = {
+                money: playerMoney,
+                highScore: highScore,
+                upgradeLevels: playerUpgradeLevels
+            };
+            localStorage.setItem('chromashockArenaData', JSON.stringify(gameData));
+        }
+
+        function loadGame() {
+            const savedData = localStorage.getItem('chromashockArenaData');
+            if (savedData) {
+                const gameData = JSON.parse(savedData);
+                playerMoney = gameData.money || 0;
+                highScore = gameData.highScore || 0;
+                playerUpgradeLevels = gameData.upgradeLevels || {};
+            } else {
+                // Initialize upgrade levels if no save data exists
+                for (const key in UPGRADES_DEFINITION) {
+                    playerUpgradeLevels[key] = 0;
+                }
+            }
+        }
+
+        // --- UI Management ---
+        function showScreen(screenId) {
+            mainMenu.style.display = 'none';
+            upgradeScreen.style.display = 'none';
+            gameOverMenu.style.display = 'none';
+            pauseMenu.style.display = 'none'; // Hide pause menu by default
+            uiOverlay.style.display = 'none';
+            gameRunning = false;
+            gamePaused = false; // Reset paused state
+            cancelAnimationFrame(animationFrameId); // Stop game loop if active
+
+            if (screenId === 'main-menu') {
+                mainMenu.style.display = 'block';
+                highScoreDisplay.textContent = `最高分數：${highScore}`;
+            } else if (screenId === 'upgrade-screen') {
+                upgradeScreen.style.display = 'block';
+                populateUpgradeList();
+            } else if (screenId === 'game-over-menu') {
+                gameOverMenu.style.display = 'block';
+            } else if (screenId === 'pause-menu') { // New: Show pause menu
+                pauseMenu.style.display = 'block';
+                gamePaused = true; // Ensure game is paused
+            }
+            else if (screenId === 'game') {
+                uiOverlay.style.display = 'block';
+                gameRunning = true;
+                // Start game loop when entering game screen
+                lastTime = performance.now();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+            currentScreen = screenId;
+        }
+
+        function populateUpgradeList() {
+            currentMoneyDisplay.textContent = `金錢：${playerMoney}`;
+            upgradeListDiv.innerHTML = ''; // Clear previous list
+
+            for (const key in UPGRADES_DEFINITION) {
+                const def = UPGRADES_DEFINITION[key];
+                const currentLevel = playerUpgradeLevels[key];
+                const nextLevel = currentLevel + 1;
+
+                // Calculate current and next values
+                let currentValue;
+                let nextValue;
+                let nextPrice = def.initialPrice * Math.pow(def.priceFactor, currentLevel);
+                nextPrice = Math.round(nextPrice); // Round price for display
+
+                if (def.type === 'multiply') {
+                    currentValue = def.baseValue * Math.pow(def.increment, currentLevel);
+                    nextValue = def.baseValue * Math.pow(def.increment, nextLevel);
+                } else {
+                    currentValue = def.baseValue + def.increment * currentLevel;
+                    nextValue = def.baseValue + def.increment * nextLevel;
+                }
+
+                const itemDiv = document.createElement('div');
+                itemDiv.classList.add('upgrade-item');
+                itemDiv.innerHTML = `
+                    <h4>${def.category}</h4>
+                    <h3>${def.name}</h3>
+                    <p>${def.effect}</p>
+                    <p class="level-info">等級: ${currentLevel}</p>
+                    <p>當前: ${def.type === 'multiply' ? currentValue.toFixed(2) : currentValue.toFixed(0)}</p>
+                    <p>下級: ${def.type === 'multiply' ? nextValue.toFixed(2) : nextValue.toFixed(0)}</p>
+                    <p class="cost-info">價格: ${nextPrice} 金</p>
+                    <button data-upgrade-key="${key}" data-price="${nextPrice}">購買</button>
+                `;
+
+                const buyButton = itemDiv.querySelector('button');
+                if (playerMoney < nextPrice) {
+                    buyButton.disabled = true;
+                    buyButton.textContent = '金錢不足';
+                } else {
+                    buyButton.onclick = () => buyUpgrade(key, nextPrice);
+                }
+
+                upgradeListDiv.appendChild(itemDiv);
+            }
+        }
+
+        function buyUpgrade(key, price) {
+            if (playerMoney >= price) {
+                playerMoney -= price;
+                playerUpgradeLevels[key]++;
+                saveGame();
+                populateUpgradeList(); // Refresh the list
+                updatePlayerStatsFromUpgrades(); // Apply new stats to player
+            }
+        }
+
+        function updatePlayerStatsFromUpgrades() {
+            if (!player) return; // Player object might not exist yet
+
+            // Reset player stats to base before applying upgrades
+            player.maxHealth = PLAYER_MAX_HEALTH_BASE;
+            player.healthRegen = PLAYER_HEALTH_REGEN_BASE;
+            player.moveSpeed = PLAYER_MOVE_SPEED_BASE;
+            player.baseBulletDamage = PLAYER_BULLET_DAMAGE_BASE;
+            player.fireRate = PLAYER_FIRE_RATE_BASE;
+            player.bulletsPerShot = PLAYER_BULLETS_PER_SHOT_BASE; // NEW: Reset bullets per shot
+
+            player.skillQ.damage = SKILL_Q_DAMAGE_BASE;
+            player.skillQ.targets = SKILL_Q_TARGETS_BASE;
+            player.skillE.damage = SKILL_E_DAMAGE_BASE;
+            player.skillE.radius = SKILL_E_RADIUS_BASE;
+            player.skillE.knockback = SKILL_E_KNOCKBACK_BASE;
+            player.skillRMB.damagePerFrame = SKILL_RMB_DAMAGE_BASE;
+            player.skillRMB.duration = SKILL_RMB_DURATION_BASE;
+
+            for (const key in playerUpgradeLevels) {
+                const level = playerUpgradeLevels[key];
+                const def = UPGRADES_DEFINITION[key];
+                if (level > 0) {
+                    if (def.type === 'multiply') {
+                        const multiplier = Math.pow(def.increment, level);
+                        if (key === 'fireRate') player.fireRate *= multiplier;
+                    } else {
+                        const addedValue = def.increment * level;
+                        if (key === 'bulletDamage') player.baseBulletDamage += addedValue;
+                        else if (key === 'bulletsPerShot') player.bulletsPerShot += addedValue; // NEW: Apply bullets per shot
+                        else if (key === 'maxHealth') player.maxHealth += addedValue;
+                        else if (key === 'healthRegen') player.healthRegen += addedValue;
+                        else if (key === 'moveSpeed') player.moveSpeed += addedValue;
+                        else if (key === 'waveRadius') player.skillE.radius += addedValue;
+                        else if (key === 'waveDamage') player.skillE.damage += addedValue;
+                        else if (key === 'waveKnockback') player.skillE.knockback += addedValue;
+                        else if (key === 'lightningTargets') player.skillQ.targets += addedValue;
+                        else if (key === 'lightningDamage') player.skillQ.damage += addedValue;
+                        else if (key === 'laserDuration') player.skillRMB.duration += addedValue;
+                        else if (key === 'laserDamage') player.skillRMB.damagePerFrame += addedValue;
+                    }
+                }
+            }
+            player.health = Math.min(player.health, player.maxHealth); // Cap health if max increased
+        }
+
+        function updateHUD() {
+            scoreDisplay.textContent = `分數：${currentScore}`;
+            waveDisplay.textContent = `WAVE：${currentWave} | 剩餘敵人：${enemiesInWave - enemiesSpawnedThisWave + enemies.length}`;
+            healthBar.style.width = `${(player.health / player.maxHealth) * 100}%`;
+            healthBar.style.backgroundColor = player.health <= 0 ? '#FF00FF' : COLOR_PLAYER; // Change color if dead
+
+            updateSkillIcon(skillQIcon, player.skillQ.cooldownLeft, SKILL_Q_COOLDOWN);
+            updateSkillIcon(skillEIcon, player.skillE.cooldownLeft, SKILL_E_COOLDOWN);
+            updateSkillIcon(skillRMBIcon, player.skillRMB.cooldownLeft, SKILL_RMB_COOLDOWN);
+        }
+
+        function updateSkillIcon(iconElement, cooldownLeft, totalCooldown) {
+            const cooldownDisplay = iconElement.querySelector('.skill-cooldown');
+            if (cooldownLeft > 0) {
+                iconElement.classList.remove('ready');
+                cooldownDisplay.style.display = 'flex';
+                cooldownDisplay.textContent = Math.ceil(cooldownLeft);
+            } else {
+                iconElement.classList.add('ready');
+                cooldownDisplay.style.display = 'none';
+            }
+        }
+
+        // === Game Entity Classes ===
+
+        class Player {
+            constructor() {
+                this.x = CANVAS_WIDTH / 2;
+                this.y = CANVAS_HEIGHT / 2;
+                this.radius = 15;
+                this.color = COLOR_PLAYER;
+                this.health = PLAYER_MAX_HEALTH_BASE;
+                this.maxHealth = PLAYER_MAX_HEALTH_BASE; // Will be upgraded
+                this.healthRegen = PLAYER_HEALTH_REGEN_BASE; // Will be upgraded
+                this.moveSpeed = PLAYER_MOVE_SPEED_BASE; // Will be upgraded
+
+                this.baseBulletDamage = PLAYER_BULLET_DAMAGE_BASE; // Will be upgraded
+                this.fireRate = PLAYER_FIRE_RATE_BASE; // Will be upgraded
+                this.bulletsPerShot = PLAYER_BULLETS_PER_SHOT_BASE; // NEW: Number of bullets per shot
+                this.lastShotTime = 0;
+
+                this.skillQ = {
+                    cooldownLeft: 0,
+                    damage: SKILL_Q_DAMAGE_BASE,
+                    targets: SKILL_Q_TARGETS_BASE,
+                    lastUsed: 0
+                };
+                this.skillE = {
+                    cooldownLeft: 0,
+                    damage: SKILL_E_DAMAGE_BASE,
+                    radius: SKILL_E_RADIUS_BASE,
+                    knockback: SKILL_E_KNOCKBACK_BASE,
+                    lastUsed: 0
+                };
+                this.skillRMB = {
+                    cooldownLeft: 0,
+                    damagePerFrame: SKILL_RMB_DAMAGE_BASE,
+                    duration: SKILL_RMB_DURATION_BASE, // ms
+                    lastUsed: 0,
+                    isActive: false,
+                    activeTimer: 0
+                };
+
+                this.isDead = false; // Re-enabled: Player death flag
+                this.activeLaserEffect = null; // For the continuous laser beam visual
+
+                updatePlayerStatsFromUpgrades(); // Apply initial upgrades on creation
+            }
+
+            update(deltaTime) {
+                if (this.isDead) return; // If dead, stop updating
+
+                // --- Movement ---
+                let dx = 0;
+                let dy = 0;
+                if (keys['w']) dy -= 1;
+                if (keys['s']) dy += 1;
+                if (keys['a']) dx -= 1;
+                if (keys['d']) dx += 1;
+
+                if (dx !== 0 || dy !== 0) {
+                    const angle = Math.atan2(dy, dx);
+                    this.x += Math.cos(angle) * this.moveSpeed * deltaTime;
+                    this.y += Math.sin(angle) * this.moveSpeed * deltaTime;
+                }
+
+                // Clamp player within canvas bounds
+                this.x = clamp(this.x, this.radius, CANVAS_WIDTH - this.radius);
+                this.y = clamp(this.y, this.radius, CANVAS_HEIGHT - this.radius);
+
+                // --- Aiming ---
+                this.angle = Math.atan2(mouse.y - this.y, mouse.x - this.x);
+
+                // --- Basic Shooting ---
+                if (mouse.leftPressed && (performance.now() - this.lastShotTime) > (1000 / this.fireRate)) {
+                    // NEW: Fire multiple bullets with spread
+                    const numBullets = this.bulletsPerShot;
+                    const totalSpreadAngle = Math.PI / 8; // Adjust spread angle as needed (e.g., 22.5 degrees)
+                    const angleStep = numBullets > 1 ? totalSpreadAngle / (numBullets - 1) : 0;
+                    const startAngleOffset = numBullets > 1 ? -totalSpreadAngle / 2 : 0;
+
+                    for (let i = 0; i < numBullets; i++) {
+                        const currentBulletAngle = this.angle + startAngleOffset + (angleStep * i);
+                        const bulletX = this.x + Math.cos(currentBulletAngle) * this.radius;
+                        const bulletY = this.y + Math.sin(currentBulletAngle) * this.radius;
+                        const bullet = pool.getProjectile();
+                        bullet.reset(bulletX, bulletY, Math.cos(currentBulletAngle), Math.sin(currentBulletAngle), BULLET_SPEED, this.baseBulletDamage, 'player');
+                        playerProjectiles.push(bullet);
+                    }
+                    this.lastShotTime = performance.now();
+                }
+
+                // --- Skill Cooldowns ---
+                this.skillQ.cooldownLeft = Math.max(0, SKILL_Q_COOLDOWN - (performance.now() - this.skillQ.lastUsed) / 1000);
+                this.skillE.cooldownLeft = Math.max(0, SKILL_E_COOLDOWN - (performance.now() - this.skillE.lastUsed) / 1000);
+                this.skillRMB.cooldownLeft = Math.max(0, SKILL_RMB_COOLDOWN - (performance.now() - this.skillRMB.lastUsed) / 1000);
+
+                // --- Skill Activation ---
+                // Only activate if not active and cooldown is ready
+                if (keys['q'] && this.skillQ.cooldownLeft <= 0) {
+                    this.activateSkillQ();
+                    keys['q'] = false; // Consume key press to prevent re-activation if held down
+                }
+                if (keys['e'] && this.skillE.cooldownLeft <= 0) {
+                    this.activateSkillE();
+                    keys['e'] = false; // Consume key press
+                }
+                if (mouse.rightPressed && this.skillRMB.cooldownLeft <= 0 && !this.skillRMB.isActive) {
+                    this.activateSkillRMB();
+                    mouse.rightPressed = false; // Consume mouse press
+                }
+
+                // --- Laser Beam Logic ---
+                if (this.skillRMB.isActive) {
+                    this.skillRMB.activeTimer += deltaTime * 1000;
+                    if (this.skillRMB.activeTimer >= this.skillRMB.duration) {
+                        this.skillRMB.isActive = false;
+                        this.skillRMB.activeTimer = 0;
+                        this.activeLaserEffect = null; // Laser effect ends
+                    } else {
+                        // Update the continuous laser effect's position
+                        if (!this.activeLaserEffect) { // Should not happen if activateSkillRMB creates it
+                            this.activeLaserEffect = new LaserEffect(this.x, this.y, this.x, this.y, COLOR_SKILL_RMB, 10, 1);
+                        }
+                        this.activeLaserEffect.x1 = this.x;
+                        this.activeLaserEffect.y1 = this.y;
+                        this.activeLaserEffect.x2 = this.x + Math.cos(this.angle) * CANVAS_WIDTH;
+                        this.activeLaserEffect.y2 = this.y + Math.sin(this.angle) * CANVAS_WIDTH;
+                    }
+                }
+
+                // --- Health Regeneration ---
+                this.health += this.healthRegen * deltaTime;
+                this.health = clamp(this.health, -Infinity, this.maxHealth); // Allow negative for display
+
+                // --- Game Over ---
+                if (this.health <= 0 && !this.isDead) { // Re-enabled death condition
+                    this.isDead = true;
+                    endGame();
+                }
+            }
+
+            draw(ctx) {
+                if (this.isDead) return; // Don't draw if dead
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+
+                // Player body (triangle/ship shape)
+                ctx.beginPath();
+                ctx.moveTo(this.radius, 0);
+                ctx.lineTo(-this.radius, -this.radius / 1.5);
+                ctx.lineTo(-this.radius, this.radius / 1.5);
+                ctx.closePath();
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset shadow for other elements
+
+                // Engine glow
+                ctx.beginPath();
+                ctx.arc(-this.radius * 1.2, 0, this.radius * 0.8, -Math.PI / 2, Math.PI / 2, false);
+                ctx.fillStyle = `rgba(0, 255, 255, 0.7)`; // Cyan glow
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = COLOR_PLAYER;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Add small engine particles
+                for (let i = 0; i < 2; i++) {
+                    particles.push(new Particle(
+                        this.x + Math.cos(this.angle + Math.PI) * this.radius * 1.2,
+                        this.y + Math.sin(this.angle + Math.PI) * this.radius * 1.2 + (i === 0 ? -this.radius / 3 : this.radius / 3),
+                        Math.cos(this.angle + Math.PI + (Math.random() - 0.5) * 0.5) * 100,
+                        Math.sin(this.angle + Math.PI + (Math.random() - 0.5) * 0.5) * 100,
+                        2 + Math.random() * 3,
+                        0.5 + Math.random() * 0.5,
+                        COLOR_PLAYER,
+                        `rgba(0, 255, 255, ${0.5 + Math.random() * 0.5})` // Brighter cyan
+                    ));
+                }
+
+                ctx.restore();
+            }
+
+            activateSkillQ() {
+                this.skillQ.lastUsed = performance.now();
+
+                const targets = enemies.slice().sort((a, b) => dist(this.x, this.y, a.x, a.y) - dist(this.x, this.y, b.x, b.y));
+                let chainedTargets = [];
+                let currentTarget = { x: this.x, y: this.y }; // Start from player
+
+                for (let i = 0; i < this.skillQ.targets; i++) {
+                    let nextTarget = null;
+                    // Find the nearest living enemy not already targeted
+                    for(let j = 0; j < targets.length; j++) {
+                        if (!targets[j].isDead && !chainedTargets.includes(targets[j])) {
+                            nextTarget = targets[j];
+                            break;
+                        }
+                    }
+
+                    if (nextTarget) {
+                        lightningEffects.push({
+                            x1: currentTarget.x,
+                            y1: currentTarget.y,
+                            x2: nextTarget.x,
+                            y2: nextTarget.y,
+                            lifetime: 0.2 // seconds
+                        });
+                        nextTarget.takeDamage(this.skillQ.damage);
+                        chainedTargets.push(nextTarget);
+                        currentTarget = nextTarget;
+                    } else {
+                        break; // No more valid targets
+                    }
+                }
+            }
+
+            activateSkillE() {
+                this.skillE.lastUsed = performance.now();
+
+                waveEffects.push({
+                    x: this.x,
+                    y: this.y,
+                    radius: 0,
+                    maxRadius: this.skillE.radius,
+                    speed: this.skillE.radius / 0.3, // Reach max radius in 0.3 seconds
+                    alpha: 1
+                });
+
+                for (const enemy of enemies) {
+                    if (enemy.isDead) continue;
+                    if (dist(this.x, this.y, enemy.x, enemy.y) < this.skillE.radius) {
+                        enemy.takeDamage(this.skillE.damage);
+                        // Apply knockback
+                        const angleToEnemy = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+                        enemy.applyKnockback(Math.cos(angleToEnemy) * this.skillE.knockback, Math.sin(angleToEnemy) * this.skillE.knockback);
+                    }
+                }
+            }
+
+            activateSkillRMB() {
+                this.skillRMB.lastUsed = performance.now();
+                this.skillRMB.isActive = true;
+                this.skillRMB.activeTimer = 0;
+                // Create the single laser effect object here
+                // Initial x2, y2 can be player's position, will be updated in player.update
+                this.activeLaserEffect = new LaserEffect(this.x, this.y, this.x, this.y, COLOR_SKILL_RMB, 10, 1);
+            }
+
+            takeDamage(amount) {
+                this.health -= amount;
+                this.health = clamp(this.health, -Infinity, this.maxHealth); // Allow negative for display
+
+                // Screen shake effect
+                canvas.style.transform = `translate(${Math.random() * 5 - 2.5}px, ${Math.random() * 5 - 2.5}px)`;
+                setTimeout(() => canvas.style.transform = '', 50);
+            }
+        }
+
+        class Enemy {
+            constructor(type, x, y, hp, speed, radius, color, behavior, scoreValue) {
+                this.type = type;
+                this.x = x;
+                this.y = y;
+                this.initialHealth = hp;
+                this.health = hp;
+                this.speed = speed;
+                this.radius = radius;
+                this.color = color;
+                this.behavior = behavior;
+                this.scoreValue = scoreValue;
+                this.isDead = false;
+                this.knockbackVelX = 0;
+                this.knockbackVelY = 0;
+                this.knockbackFriction = 0.9; // Reduce knockback speed over time
+
+                this.oscillationTimer = 0; // For Grunt/Scout
+            }
+
+            update(deltaTime) {
+                if (this.isDead) return;
+
+                // Apply knockback
+                this.x += this.knockbackVelX * deltaTime;
+                this.y += this.knockbackVelY * deltaTime;
+                this.knockbackVelX *= this.knockbackFriction;
+                this.knockbackVelY *= this.knockbackFriction;
+
+                // Ensure knockback doesn't override movement too much or continue indefinitely
+                if (Math.abs(this.knockbackVelX) < 1) this.knockbackVelX = 0;
+                if (Math.abs(this.knockbackVelY) < 1) this.knockbackVelY = 0;
+
+                // --- Behavior ---
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const angle = Math.atan2(dy, dx);
+
+                let targetSpeedX = Math.cos(angle) * this.speed;
+                let targetSpeedY = Math.sin(angle) * this.speed;
+
+                if (this.behavior === 'chase_oscillate') {
+                    this.oscillationTimer += deltaTime * 5; // Adjust speed of oscillation
+                    const oscillationOffset = Math.sin(this.oscillationTimer) * 50; // Max offset
+                    const oscillationAngle = angle + Math.PI / 2; // Perpendicular to movement
+                    this.x += Math.cos(oscillationAngle) * oscillationOffset * deltaTime;
+                    this.y += Math.sin(oscillationAngle) * oscillationOffset * deltaTime;
+                }
+
+                this.x += targetSpeedX * deltaTime;
+                this.y += targetSpeedY * deltaTime;
+            }
+
+            draw(ctx) {
+                if (this.isDead) return;
+
+                ctx.beginPath();
+                if (this.type === 'Grunt' || this.type === 'Spitter') {
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                } else if (this.type === 'Scout') {
+                    // Triangle (facing player or forward)
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                    ctx.rotate(angle + Math.PI / 2); // Rotate to face direction
+                    ctx.moveTo(0, -this.radius);
+                    ctx.lineTo(-this.radius * Math.sqrt(3) / 2, this.radius / 2);
+                    ctx.lineTo(this.radius * Math.sqrt(3) / 2, this.radius / 2);
+                    ctx.closePath();
+                    ctx.restore();
+                } else if (this.type === 'Brute') {
+                    // Square
+                    ctx.rect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+                }
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+
+                // Health bar (simple above enemy)
+                const healthBarWidth = this.radius * 2;
+                const healthBarHeight = 3;
+                const healthBarX = this.x - this.radius;
+                const healthBarY = this.y - this.radius - 10;
+                ctx.fillStyle = `rgba(255, 0, 255, 0.4)`; // Magenta background
+                ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+                ctx.fillStyle = `rgba(0, 255, 255, 0.8)`; // Cyan fill
+                ctx.fillRect(healthBarX, healthBarY, healthBarWidth * (this.health / this.initialHealth), healthBarHeight);
+                ctx.shadowBlur = 0; // Reset shadow
+            }
+
+            takeDamage(amount) {
+                this.health -= amount;
+                if (this.health <= 0 && !this.isDead) {
+                    this.isDead = true;
+                    currentScore += this.scoreValue;
+                    this.explode();
+                }
+            }
+
+            applyKnockback(vx, vy) {
+                this.knockbackVelX += vx;
+                this.knockbackVelY += vy;
+            }
+
+            explode() {
+                // Generate explosion particles
+                const numParticles = 20 + Math.random() * 10;
+                for (let i = 0; i < numParticles; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 100 + Math.random() * 300;
+                    const size = 3 + Math.random() * 5;
+                    const lifetime = 0.5 + Math.random() * 0.5;
+                    const color = COLOR_EXPLOSION_PARTICLE[Math.floor(Math.random() * COLOR_EXPLOSION_PARTICLE.length)];
+                    particles.push(new Particle(this.x, this.y, Math.cos(angle) * speed, Math.sin(angle) * speed, size, lifetime, color, color));
+                }
+
+                // Small screen shake on large enemy explosion
+                if (this.type === 'Brute') {
+                    canvas.style.transform = `translate(${Math.random() * 8 - 4}px, ${Math.random() * 8 - 4}px)`;
+                    setTimeout(() => canvas.style.transform = '', 70);
+                }
+            }
+        }
+
+        class Projectile {
+            constructor(x, y, velX, velY, speed, damage, owner) {
+                this.reset(x, y, velX, velY, speed, damage, owner);
+            }
+
+            reset(x, y, velX, velY, speed, damage, owner) {
+                this.x = x;
+                this.y = y;
+                this.velX = velX * speed;
+                this.velY = velY * speed;
+                this.damage = damage;
+                this.radius = 5;
+                this.color = (owner === 'player') ? COLOR_PLAYER_BULLET : COLOR_ENEMY_GRUNT; // Placeholder for enemy bullet color
+                this.owner = owner; // 'player' or 'enemy'
+                this.isActive = true;
+            }
+
+            update(deltaTime) {
+                if (!this.isActive) return;
+
+                this.x += this.velX * deltaTime;
+                this.y += this.velY * deltaTime;
+
+                // Deactivate if off-screen
+                if (this.x < -this.radius || this.x > CANVAS_WIDTH + this.radius ||
+                    this.y < -this.radius || this.y > CANVAS_HEIGHT + this.radius) {
+                    this.isActive = false;
+                }
+            }
+
+            draw(ctx) {
+                if (!this.isActive) return;
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Add small particle trail
+                if (this.owner === 'player') {
+                    particles.push(new Particle(
+                        this.x - this.velX * deltaTime * 5, // Slightly behind bullet
+                        this.y - this.velY * deltaTime * 5,
+                        -this.velX * 0.1, // Small backward velocity
+                        -this.velY * 0.1,
+                        2 + Math.random() * 2,
+                        0.2 + Math.random() * 0.2,
+                        COLOR_PLAYER,
+                        `rgba(0, 255, 255, ${0.4 + Math.random() * 0.4})`
+                    ));
+                }
+            }
+        }
+
+        class Particle {
+            constructor(x, y, velX, velY, size, lifetime, color, glowColor) {
+                this.reset(x, y, velX, velY, size, lifetime, color, glowColor);
+            }
+
+            reset(x, y, velX, velY, size, lifetime, color, glowColor) {
+                this.x = x;
+                this.y = y;
+                this.velX = velX;
+                this.velY = velY;
+                this.size = size;
+                this.lifetime = lifetime; // In seconds
+                this.timeAlive = 0;
+                this.color = color;
+                this.glowColor = glowColor || color; // Color for the 'lighter' blend
+                this.isActive = true;
+            }
+
+            update(deltaTime) {
+                if (!this.isActive) return;
+
+                this.x += this.velX * deltaTime;
+                this.y += this.velY * deltaTime;
+                this.timeAlive += deltaTime;
+
+                if (this.timeAlive >= this.lifetime) {
+                    this.isActive = false;
+                }
+            }
+
+            draw(ctx) {
+                if (!this.isActive) return;
+
+                const alpha = 1 - (this.timeAlive / this.lifetime);
+                ctx.globalAlpha = alpha;
+
+                // Draw solid core
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * 0.6, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                // Draw glow (using lighter blend mode)
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.glowColor;
+                ctx.fill();
+                ctx.globalCompositeOperation = 'source-over'; // Reset blend mode
+
+                ctx.globalAlpha = 1; // Reset alpha
+            }
+        }
+
+        // New Class for Laser Beam visual
+        class LaserEffect {
+            constructor(x1, y1, x2, y2, color, width, alpha) {
+                this.x1 = x1;
+                this.y1 = y1;
+                this.x2 = x2;
+                this.y2 = y2;
+                this.color = color;
+                this.width = width;
+                this.alpha = alpha;
+            }
+
+            draw(ctx) {
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.moveTo(this.x1, this.y1);
+                ctx.lineTo(this.x2, this.y2);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.width;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = this.color;
+                ctx.stroke();
+
+                // Add central white core for laser
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = this.width * 0.4;
+                ctx.shadowBlur = 0; // Don't re-apply glow for core
+                ctx.stroke();
+
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // --- Background Stars ---
+        const stars = [];
+        let playerPrevX = CANVAS_WIDTH / 2;
+        let playerPrevY = CANVAS_HEIGHT / 2;
+
+        function createStars() {
+            for (let i = 0; i < 400; i++) { // More stars for better parallax
+                stars.push({
+                    x: Math.random() * CANVAS_WIDTH,
+                    y: Math.random() * CANVAS_HEIGHT,
+                    size: Math.random() * 2,
+                    // layer 0: furthest, layer 2: closest
+                    layer: Math.floor(Math.random() * 3)
+                });
+            }
+        }
+
+        function drawStars(ctx) {
+            // Calculate player movement delta
+            const dx = player.x - playerPrevX;
+            const dy = player.y - playerPrevY;
+
+            ctx.fillStyle = '#FFFFFF'; // White stars
+            for (const star of stars) {
+                let parallaxSpeed;
+                let alphaMultiplier;
+                switch (star.layer) {
+                    case 0: // Furthest
+                        parallaxSpeed = 0.05;
+                        alphaMultiplier = 0.4;
+                        break;
+                    case 1: // Middle
+                        parallaxSpeed = 0.15;
+                        alphaMultiplier = 0.6;
+                        break;
+                    case 2: // Closest
+                        parallaxSpeed = 0.3;
+                        alphaMultiplier = 0.8;
+                        break;
+                }
+
+                // Apply parallax movement based on player's movement
+                star.x -= dx * parallaxSpeed;
+                star.y -= dy * parallaxSpeed;
+
+                // Wrap around when off-screen
+                if (star.x < 0) star.x += CANVAS_WIDTH;
+                if (star.x > CANVAS_WIDTH) star.x -= CANVAS_WIDTH;
+                if (star.y < 0) star.y += CANVAS_HEIGHT;
+                if (star.y > CANVAS_HEIGHT) star.y -= CANVAS_HEIGHT;
+
+                ctx.globalAlpha = star.size / 2 * alphaMultiplier; // Brighter for closer layers
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1; // Reset for next draw calls
+            }
+
+            // Update previous player position for next frame's calculation
+            playerPrevX = player.x;
+            playerPrevY = player.y;
+        }
+
+
+        // --- Crosshair Drawing ---
+        function drawCrosshair(ctx) {
+            const size = 20; // Length of each arm
+            const gap = 5; // Gap from center dot
+            const thickness = 2;
+
+            ctx.strokeStyle = COLOR_CROSSHAIR;
+            ctx.lineWidth = thickness;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = COLOR_CROSSHAIR;
+
+            // Horizontal line
+            ctx.beginPath();
+            ctx.moveTo(mouse.x - size - gap, mouse.y);
+            ctx.lineTo(mouse.x - gap, mouse.y);
+            ctx.moveTo(mouse.x + gap, mouse.y);
+            ctx.lineTo(mouse.x + size + gap, mouse.y);
+            ctx.stroke();
+
+            // Vertical line
+            ctx.beginPath();
+            ctx.moveTo(mouse.x, mouse.y - size - gap);
+            ctx.lineTo(mouse.x, mouse.y - gap);
+            ctx.moveTo(mouse.x, mouse.y + gap);
+            ctx.lineTo(mouse.x, mouse.y + size + gap);
+            ctx.stroke();
+
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, thickness * 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = COLOR_CROSSHAIR;
+            ctx.fill();
+
+            ctx.shadowBlur = 0; // Reset shadow
+        }
+
+
+        // === Game Logic Functions ===
+
+        function initGame() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+
+            // Load game data at start
+            loadGame();
+            showScreen('main-menu'); // Always start with main menu
+
+            // Event Listeners
+            startGameBtn.addEventListener('click', startGame);
+            upgradesBtn.addEventListener('click', () => showScreen('upgrade-screen'));
+            backFromUpgradesBtn.addEventListener('click', () => showScreen('main-menu'));
+            returnToMainMenuBtn.addEventListener('click', () => showScreen('main-menu'));
+
+            resumeGameBtn.addEventListener('click', resumeGame); // New: Resume button
+            exitGameBtn.addEventListener('click', () => { // New: Exit button logic
+                endGame(); // End the current game session and return to main menu
+            });
+
+            document.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+                if (e.key.toLowerCase() === 'p' || e.key === 'escape') { // New: Pause key
+                    if (gameRunning && !player.isDead) { // Only pause if game is actively running and player is alive
+                        if (gamePaused) {
+                            resumeGame();
+                        } else {
+                            pauseGame();
+                        }
+                    }
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouse.x = e.clientX - rect.left;
+                mouse.y = e.clientY - rect.top;
+            });
+            canvas.addEventListener('mousedown', (e) => {
+                if (e.button === 0) mouse.leftPressed = true;
+                if (e.button === 2) mouse.rightPressed = true;
+            });
+            canvas.addEventListener('mouseup', (e) => {
+                if (e.button === 0) mouse.leftPressed = false;
+                if (e.button === 2) mouse.rightPressed = false;
+            });
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent right-click context menu
+
+            createStars(); // Initialize background stars
+        }
+
+        function startGame() {
+            // Reset game state
+            player = new Player();
+            enemies = [];
+            playerProjectiles = [];
+            particles = [];
+            lightningEffects = [];
+            waveEffects = [];
+            player.activeLaserEffect = null; // Ensure no laser effect persists
+
+            currentScore = 0;
+            currentWave = 0; // Start at 0, first call to startNextWave will make it 1
+            enemiesSpawnedThisWave = 0;
+            lastEnemySpawnTime = 0;
+            waveTextDisplayTime = performance.now(); // Show "Wave 1" text immediately
+
+            playerPrevX = player.x; // Initialize for parallax
+            playerPrevY = player.y;
+
+            startNextWave(); // Start first wave
+            showScreen('game');
+        }
+
+        function endGame() {
+            gameRunning = false;
+            gamePaused = false; // Ensure game is unpaused before showing game over
+            cancelAnimationFrame(animationFrameId);
+
+            playerMoney += currentScore; // 1:1 score to money conversion
+            if (currentScore > highScore) {
+                highScore = currentScore;
+            }
+            saveGame();
+
+            finalScoreDisplay.textContent = currentScore;
+            finalWaveDisplay.textContent = currentWave;
+            gainedMoneyDisplay.textContent = currentScore;
+            showScreen('game-over-menu');
+        }
+
+        function pauseGame() {
+            gamePaused = true;
+            cancelAnimationFrame(animationFrameId);
+            showScreen('pause-menu');
+        }
+
+        function resumeGame() {
+            gamePaused = false;
+            showScreen('game'); // This will restart the game loop
+        }
+
+        function startNextWave() {
+            currentWave++;
+            enemiesSpawnedThisWave = 0;
+            lastEnemySpawnTime = 0; // Reset spawn timer for new wave
+            waveTextDisplayTime = performance.now(); // Reset timer for wave text
+            enemiesInWave = WAVE_INITIAL_ENEMY_COUNT + (currentWave - 1) * WAVE_ENEMY_COUNT_PER_WAVE;
+        }
+
+        function spawnEnemy() {
+            if (enemiesSpawnedThisWave >= enemiesInWave) return; // All enemies for this wave spawned
+
+            let type, hp, speed, radius, color, behavior, scoreValue;
+            const enemyChoices = [];
+
+            if (currentWave >= 1) enemyChoices.push({ type: 'Grunt', hp: 15, speed: 120, radius: 10, color: COLOR_ENEMY_GRUNT, behavior: 'chase_oscillate', score: 10 });
+            if (currentWave >= 2) enemyChoices.push({ type: 'Scout', hp: 10, speed: 200, radius: 12, color: COLOR_ENEMY_SCOUT, behavior: 'chase_oscillate', score: 15 });
+            if (currentWave >= 4) enemyChoices.push({ type: 'Brute', hp: 40, speed: 80, radius: 25, color: COLOR_ENEMY_BRUTE, behavior: 'chase_direct', score: 30 });
+            // If currentWave >= 6 and Spitter was implemented, add it here
+
+            const selectedEnemyDef = enemyChoices[Math.floor(Math.random() * enemyChoices.length)];
+            type = selectedEnemyDef.type;
+            hp = selectedEnemyDef.hp;
+            speed = selectedEnemyDef.speed;
+            radius = selectedEnemyDef.radius;
+            color = selectedEnemyDef.color;
+            behavior = selectedEnemyDef.behavior;
+            scoreValue = selectedEnemyDef.score;
+
+            // Apply wave scaling
+            hp *= (1 + (currentWave - 1) * WAVE_ENEMY_HP_SCALING);
+            speed *= (1 + (currentWave - 1) * WAVE_ENEMY_SPEED_SCALING);
+
+            // Random spawn position outside canvas
+            let x, y;
+            const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+            if (side === 0) { // Top
+                x = Math.random() * CANVAS_WIDTH;
+                y = -ENEMY_SPAWN_OFFSET;
+            } else if (side === 1) { // Right
+                x = CANVAS_WIDTH + ENEMY_SPAWN_OFFSET;
+                y = Math.random() * CANVAS_HEIGHT;
+            } else if (side === 2) { // Bottom
+                x = Math.random() * CANVAS_WIDTH;
+                y = CANVAS_HEIGHT + ENEMY_SPAWN_OFFSET;
+            } else { // Left
+                x = -ENEMY_SPAWN_OFFSET;
+                y = Math.random() * CANVAS_HEIGHT;
+            }
+
+            enemies.push(new Enemy(type, x, y, hp, speed, radius, color, behavior, scoreValue));
+            enemiesSpawnedThisWave++;
+        }
+
+        function checkCollisions() {
+            // Player Projectile vs Enemy
+            for (let i = playerProjectiles.length - 1; i >= 0; i--) {
+                const proj = playerProjectiles[i];
+                if (!proj.isActive) continue;
+
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (enemy.isDead) continue;
+
+                    if (dist(proj.x, proj.y, enemy.x, enemy.y) < proj.radius + enemy.radius) {
+                        enemy.takeDamage(proj.damage);
+                        proj.isActive = false; // Projectile disappears on hit
+                        break; // Stop checking for this projectile
+                    }
+                }
+            }
+
+            // Player vs Enemy
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                if (enemy.isDead) continue;
+
+                if (dist(player.x, player.y, enemy.x, enemy.y) < player.radius + enemy.radius) {
+                    player.takeDamage(10); // Player takes damage on contact
+                    enemy.takeDamage(5); // Enemy also takes minor damage
+                    // Apply knockback to player
+                    const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                    player.x += Math.cos(angleToPlayer) * 15; // Small push
+                    player.y += Math.sin(angleToPlayer) * 15;
+                    // Clamp player within bounds after knockback
+                    player.x = clamp(player.x, player.radius, CANVAS_WIDTH - player.radius);
+                    player.y = clamp(player.y, player.radius, CANVAS_HEIGHT - player.radius);
+                }
+            }
+
+            // Laser Beam vs Enemy
+            if (player.skillRMB.isActive && player.activeLaserEffect) {
+                const laserX1 = player.activeLaserEffect.x1;
+                const laserY1 = player.activeLaserEffect.y1;
+                const laserX2 = player.activeLaserEffect.x2;
+                const laserY2 = player.activeLaserEffect.y2;
+
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const enemy = enemies[i];
+                    if (enemy.isDead) continue;
+
+                    // Simple line-circle intersection check (approximation for a thick laser)
+                    const lineLength = dist(laserX1, laserY1, laserX2, laserY2);
+                    if (lineLength === 0) continue; // Avoid division by zero
+
+                    const dot = (((enemy.x - laserX1) * (laserX2 - laserX1)) + ((enemy.y - laserY1) * (laserY2 - laserY1))) / Math.pow(lineLength, 2);
+
+                    const closestX = laserX1 + (dot * (laserX2 - laserX1));
+                    const closestY = laserY1 + (dot * (laserY2 - laserY1));
+
+                    // Check if closest point is within the line segment
+                    const onSegment = dot >= 0 && dot <= 1; // More robust check
+
+                    if (onSegment && dist(closestX, closestY, enemy.x, enemy.y) < enemy.radius + player.activeLaserEffect.width / 2) { // Add laser width
+                        enemy.takeDamage(player.skillRMB.damagePerFrame * deltaTime * 60); // Apply damage per second, approximated
+                    }
+                }
+            }
+        }
+
+
+        function gameLoop(timestamp) {
+            // Stop loop if game is not running or is paused
+            if (!gameRunning || gamePaused) {
+                cancelAnimationFrame(animationFrameId); // Ensure loop stops
+                return;
+            }
+
+            deltaTime = (timestamp - lastTime) / 1000; // Convert to seconds
+            lastTime = timestamp;
+
+            // --- Update Game State ---
+            player.update(deltaTime);
+
+            // Update and filter enemies
+            enemies = enemies.filter(enemy => {
+                enemy.update(deltaTime);
+                return !enemy.isDead;
+            });
+
+            // Handle enemy spawning
+            const spawnInterval = Math.max(WAVE_SPAWN_INTERVAL_MIN, WAVE_SPAWN_INTERVAL_BASE - (currentWave - 1) * WAVE_SPAWN_INTERVAL_DECREASE);
+            if (enemies.length < enemiesInWave && enemiesSpawnedThisWave < enemiesInWave && (performance.now() - lastEnemySpawnTime > spawnInterval)) {
+                spawnEnemy();
+                lastEnemySpawnTime = performance.now();
+            }
+
+            // Check for wave completion
+            if (enemies.length === 0 && enemiesSpawnedThisWave >= enemiesInWave) {
+                startNextWave();
+            }
+
+            // Update and filter player projectiles
+            playerProjectiles = playerProjectiles.filter(proj => {
+                proj.update(deltaTime);
+                if (!proj.isActive) pool.returnProjectile(proj); // Return to pool
+                return proj.isActive;
+            });
+
+            // Update and filter particles
+            particles = particles.filter(p => {
+                p.update(deltaTime);
+                if (!p.isActive) pool.returnParticle(p); // Return to pool
+                return p.isActive;
+            });
+
+            // Update and filter skill effects
+            lightningEffects = lightningEffects.filter(e => {
+                e.lifetime -= deltaTime;
+                return e.lifetime > 0;
+            });
+            waveEffects = waveEffects.filter(e => {
+                e.radius += e.speed * deltaTime;
+                e.alpha = 1 - (e.radius / e.maxRadius); // Fade out as it expands
+                return e.radius < e.maxRadius;
+            });
+            // Laser effect is now updated within player.update() and drawn directly
+            // No need to clear a list here
+
+            checkCollisions(); // Handle all collisions
+
+            // --- Drawing ---
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear canvas
+
+            drawStars(ctx); // Draw parallax background stars
+
+            // Draw game entities
+            player.draw(ctx);
+            playerProjectiles.forEach(proj => proj.draw(ctx));
+            enemies.forEach(enemy => enemy.draw(ctx));
+            particles.forEach(p => p.draw(ctx));
+
+            // Draw skill effects (on top of entities, but beneath UI)
+            lightningEffects.forEach(e => {
+                ctx.globalAlpha = e.lifetime / 0.2; // Fade out based on remaining lifetime
+                ctx.beginPath();
+                // Draw jagged line
+                ctx.moveTo(e.x1, e.y1);
+                const segments = 5;
+                for (let i = 1; i <= segments; i++) {
+                    const frac = i / segments;
+                    const midX = e.x1 + (e.x2 - e.x1) * frac;
+                    const midY = e.y1 + (e.y2 - e.y1) * frac;
+                    const perpAngle = Math.atan2(e.y2 - e.y1, e.x2 - e.x1) + Math.PI / 2;
+                    const offset = (Math.random() - 0.5) * 20; // Random jiggle
+                    ctx.lineTo(midX + Math.cos(perpAngle) * offset, midY + Math.sin(perpAngle) * offset);
+                }
+                ctx.lineTo(e.x2, e.y2);
+
+                ctx.strokeStyle = COLOR_SKILL_Q;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = COLOR_SKILL_Q;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            });
+
+            waveEffects.forEach(e => {
+                ctx.globalAlpha = e.alpha;
+                // Inner white ring
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, e.radius * 0.8, 0, Math.PI * 2); // Slightly smaller radius
+                ctx.strokeStyle = COLOR_SKILL_E_INNER;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = COLOR_SKILL_E_INNER;
+                ctx.stroke();
+
+                // Outer orange glow ring
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = COLOR_SKILL_E_OUTER;
+                ctx.lineWidth = 8;
+                ctx.shadowBlur = 25;
+                ctx.shadowColor = COLOR_SKILL_E_OUTER;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            });
+
+            // Draw the single active laser effect if it exists
+            if (player.activeLaserEffect) {
+                player.activeLaserEffect.draw(ctx);
+            }
+
+
+            // --- Draw Wave Announcement ---
+            if (performance.now() - waveTextDisplayTime < WAVE_TEXT_DURATION) {
+                const elapsed = performance.now() - waveTextDisplayTime;
+                let alpha = 0;
+                let scale = 1;
+
+                if (elapsed < 500) { // Fade in and grow
+                    alpha = elapsed / 500;
+                    scale = 0.5 + 0.5 * (elapsed / 500);
+                } else if (elapsed < WAVE_TEXT_DURATION - 500) { // Hold
+                    alpha = 1;
+                    scale = 1.5;
+                } else { // Fade out and shrink
+                    alpha = 1 - (elapsed - (WAVE_TEXT_DURATION - 500)) / 500;
+                    scale = 1.5 - 0.5 * (elapsed - (WAVE_TEXT_DURATION - 500)) / 500;
+                }
+                
+                alpha = clamp(alpha, 0, 1);
+                scale = clamp(scale, 0.5, 1.5);
+
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = COLOR_PLAYER; // Cyan for wave text
+                ctx.font = `${70 * scale}px Arial Bold`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = COLOR_PLAYER;
+                ctx.fillText(`WAVE ${currentWave}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+                ctx.restore();
+            }
+
+            // --- Draw Crosshair (always on top in game) ---
+            drawCrosshair(ctx);
+
+            // --- Update HUD ---
+            updateHUD();
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize the game when the window loads
+        window.onload = initGame;
+    </script>
+</body>
+</html>
