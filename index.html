@@ -583,7 +583,7 @@
 
             for (const key in UPGRADES_DEFINITION) {
                 const def = UPGRADES_DEFINITION[key];
-                const currentLevel = playerUpgradeLevels[key];
+                const currentLevel = playerUpgradeLevels[key] || 0; // Ensure level is defined
                 const nextLevel = currentLevel + 1;
 
                 // Calculate current and next values
@@ -631,7 +631,6 @@
                 playerUpgradeLevels[key]++;
                 saveGame();
                 populateUpgradeList(); // Refresh the list
-                updatePlayerStatsFromUpgrades(); // Apply new stats to player
             }
         }
 
@@ -644,7 +643,7 @@
             player.moveSpeed = PLAYER_MOVE_SPEED_BASE;
             player.baseBulletDamage = PLAYER_BULLET_DAMAGE_BASE;
             player.fireRate = PLAYER_FIRE_RATE_BASE;
-            player.bulletsPerShot = PLAYER_BULLETS_PER_SHOT_BASE; // NEW: Reset bullets per shot
+            player.bulletsPerShot = PLAYER_BULLETS_PER_SHOT_BASE;
 
             player.skillQ.damage = SKILL_Q_DAMAGE_BASE;
             player.skillQ.targets = SKILL_Q_TARGETS_BASE;
@@ -656,6 +655,8 @@
 
             for (const key in playerUpgradeLevels) {
                 const level = playerUpgradeLevels[key];
+                if (!level) continue; // Skip if level is 0 or undefined
+                
                 const def = UPGRADES_DEFINITION[key];
                 if (level > 0) {
                     if (def.type === 'multiply') {
@@ -664,7 +665,7 @@
                     } else {
                         const addedValue = def.increment * level;
                         if (key === 'bulletDamage') player.baseBulletDamage += addedValue;
-                        else if (key === 'bulletsPerShot') player.bulletsPerShot += addedValue; // NEW: Apply bullets per shot
+                        else if (key === 'bulletsPerShot') player.bulletsPerShot += addedValue;
                         else if (key === 'maxHealth') player.maxHealth += addedValue;
                         else if (key === 'healthRegen') player.healthRegen += addedValue;
                         else if (key === 'moveSpeed') player.moveSpeed += addedValue;
@@ -678,7 +679,8 @@
                     }
                 }
             }
-            player.health = Math.min(player.health, player.maxHealth); // Cap health if max increased
+            // After applying all upgrades, set current health correctly
+            player.health = player.maxHealth;
         }
 
         function updateHUD() {
@@ -713,13 +715,13 @@
                 this.radius = 15;
                 this.color = COLOR_PLAYER;
                 this.health = PLAYER_MAX_HEALTH_BASE;
-                this.maxHealth = PLAYER_MAX_HEALTH_BASE; // Will be upgraded
-                this.healthRegen = PLAYER_HEALTH_REGEN_BASE; // Will be upgraded
-                this.moveSpeed = PLAYER_MOVE_SPEED_BASE; // Will be upgraded
+                this.maxHealth = PLAYER_MAX_HEALTH_BASE;
+                this.healthRegen = PLAYER_HEALTH_REGEN_BASE;
+                this.moveSpeed = PLAYER_MOVE_SPEED_BASE;
 
-                this.baseBulletDamage = PLAYER_BULLET_DAMAGE_BASE; // Will be upgraded
-                this.fireRate = PLAYER_FIRE_RATE_BASE; // Will be upgraded
-                this.bulletsPerShot = PLAYER_BULLETS_PER_SHOT_BASE; // NEW: Number of bullets per shot
+                this.baseBulletDamage = PLAYER_BULLET_DAMAGE_BASE;
+                this.fireRate = PLAYER_FIRE_RATE_BASE;
+                this.bulletsPerShot = PLAYER_BULLETS_PER_SHOT_BASE;
                 this.lastShotTime = 0;
 
                 this.skillQ = {
@@ -744,14 +746,12 @@
                     activeTimer: 0
                 };
 
-                this.isDead = false; // Re-enabled: Player death flag
-                this.activeLaserEffect = null; // For the continuous laser beam visual
-
-                updatePlayerStatsFromUpgrades(); // Apply initial upgrades on creation
+                this.isDead = false;
+                this.activeLaserEffect = null;
             }
 
             update(deltaTime) {
-                if (this.isDead) return; // If dead, stop updating
+                if (this.isDead) return;
 
                 // --- Movement ---
                 let dx = 0;
@@ -776,9 +776,8 @@
 
                 // --- Basic Shooting ---
                 if (mouse.leftPressed && (performance.now() - this.lastShotTime) > (1000 / this.fireRate)) {
-                    // NEW: Fire multiple bullets with spread
                     const numBullets = this.bulletsPerShot;
-                    const totalSpreadAngle = Math.PI / 8; // Adjust spread angle as needed (e.g., 22.5 degrees)
+                    const totalSpreadAngle = Math.PI / 8; // 22.5 degrees
                     const angleStep = numBullets > 1 ? totalSpreadAngle / (numBullets - 1) : 0;
                     const startAngleOffset = numBullets > 1 ? -totalSpreadAngle / 2 : 0;
 
@@ -799,18 +798,17 @@
                 this.skillRMB.cooldownLeft = Math.max(0, SKILL_RMB_COOLDOWN - (performance.now() - this.skillRMB.lastUsed) / 1000);
 
                 // --- Skill Activation ---
-                // Only activate if not active and cooldown is ready
                 if (keys['q'] && this.skillQ.cooldownLeft <= 0) {
                     this.activateSkillQ();
-                    keys['q'] = false; // Consume key press to prevent re-activation if held down
+                    keys['q'] = false;
                 }
                 if (keys['e'] && this.skillE.cooldownLeft <= 0) {
                     this.activateSkillE();
-                    keys['e'] = false; // Consume key press
+                    keys['e'] = false;
                 }
                 if (mouse.rightPressed && this.skillRMB.cooldownLeft <= 0 && !this.skillRMB.isActive) {
                     this.activateSkillRMB();
-                    mouse.rightPressed = false; // Consume mouse press
+                    mouse.rightPressed = false;
                 }
 
                 // --- Laser Beam Logic ---
@@ -819,32 +817,31 @@
                     if (this.skillRMB.activeTimer >= this.skillRMB.duration) {
                         this.skillRMB.isActive = false;
                         this.skillRMB.activeTimer = 0;
-                        this.activeLaserEffect = null; // Laser effect ends
+                        this.activeLaserEffect = null;
                     } else {
-                        // Update the continuous laser effect's position
-                        if (!this.activeLaserEffect) { // Should not happen if activateSkillRMB creates it
+                        if (!this.activeLaserEffect) {
                             this.activeLaserEffect = new LaserEffect(this.x, this.y, this.x, this.y, COLOR_SKILL_RMB, 10, 1);
                         }
                         this.activeLaserEffect.x1 = this.x;
                         this.activeLaserEffect.y1 = this.y;
-                        this.activeLaserEffect.x2 = this.x + Math.cos(this.angle) * CANVAS_WIDTH;
-                        this.activeLaserEffect.y2 = this.y + Math.sin(this.angle) * CANVAS_WIDTH;
+                        this.activeLaserEffect.x2 = this.x + Math.cos(this.angle) * CANVAS_WIDTH * 1.5; // Ensure laser goes off-screen
+                        this.activeLaserEffect.y2 = this.y + Math.sin(this.angle) * CANVAS_HEIGHT * 1.5;
                     }
                 }
 
                 // --- Health Regeneration ---
                 this.health += this.healthRegen * deltaTime;
-                this.health = clamp(this.health, -Infinity, this.maxHealth); // Allow negative for display
+                this.health = clamp(this.health, -Infinity, this.maxHealth);
 
                 // --- Game Over ---
-                if (this.health <= 0 && !this.isDead) { // Re-enabled death condition
+                if (this.health <= 0 && !this.isDead) {
                     this.isDead = true;
                     endGame();
                 }
             }
 
             draw(ctx) {
-                if (this.isDead) return; // Don't draw if dead
+                if (this.isDead) return;
 
                 ctx.save();
                 ctx.translate(this.x, this.y);
@@ -860,18 +857,17 @@
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = this.color;
                 ctx.fill();
-                ctx.shadowBlur = 0; // Reset shadow for other elements
+                ctx.shadowBlur = 0;
 
                 // Engine glow
                 ctx.beginPath();
                 ctx.arc(-this.radius * 1.2, 0, this.radius * 0.8, -Math.PI / 2, Math.PI / 2, false);
-                ctx.fillStyle = `rgba(0, 255, 255, 0.7)`; // Cyan glow
+                ctx.fillStyle = `rgba(0, 255, 255, 0.7)`;
                 ctx.shadowBlur = 20;
                 ctx.shadowColor = COLOR_PLAYER;
                 ctx.fill();
                 ctx.shadowBlur = 0;
 
-                // Add small engine particles
                 for (let i = 0; i < 2; i++) {
                     particles.push(new Particle(
                         this.x + Math.cos(this.angle + Math.PI) * this.radius * 1.2,
@@ -881,7 +877,7 @@
                         2 + Math.random() * 3,
                         0.5 + Math.random() * 0.5,
                         COLOR_PLAYER,
-                        `rgba(0, 255, 255, ${0.5 + Math.random() * 0.5})` // Brighter cyan
+                        `rgba(0, 255, 255, ${0.5 + Math.random() * 0.5})`
                     ));
                 }
 
@@ -891,17 +887,24 @@
             activateSkillQ() {
                 this.skillQ.lastUsed = performance.now();
 
-                const targets = enemies.slice().sort((a, b) => dist(this.x, this.y, a.x, a.y) - dist(this.x, this.y, b.x, b.y));
-                let chainedTargets = [];
-                let currentTarget = { x: this.x, y: this.y }; // Start from player
+                const potentialTargets = enemies.filter(e => !e.isDead);
+                potentialTargets.sort((a, b) => dist(this.x, this.y, a.x, a.y) - dist(this.x, this.y, b.x, b.y));
 
-                for (let i = 0; i < this.skillQ.targets; i++) {
+                let chainedTargets = [];
+                let currentTarget = { x: this.x, y: this.y }; 
+
+                for (let i = 0; i < this.skillQ.targets && potentialTargets.length > 0; i++) {
                     let nextTarget = null;
-                    // Find the nearest living enemy not already targeted
-                    for(let j = 0; j < targets.length; j++) {
-                        if (!targets[j].isDead && !chainedTargets.includes(targets[j])) {
-                            nextTarget = targets[j];
-                            break;
+                    let nearestDist = Infinity;
+                    let nearestIndex = -1;
+
+                    // Find nearest available target
+                    for (let j = 0; j < potentialTargets.length; j++) {
+                        const d = dist(currentTarget.x, currentTarget.y, potentialTargets[j].x, potentialTargets[j].y);
+                        if (d < nearestDist) {
+                            nearestDist = d;
+                            nextTarget = potentialTargets[j];
+                            nearestIndex = j;
                         }
                     }
 
@@ -911,13 +914,14 @@
                             y1: currentTarget.y,
                             x2: nextTarget.x,
                             y2: nextTarget.y,
-                            lifetime: 0.2 // seconds
+                            lifetime: 0.2
                         });
                         nextTarget.takeDamage(this.skillQ.damage);
                         chainedTargets.push(nextTarget);
                         currentTarget = nextTarget;
+                        potentialTargets.splice(nearestIndex, 1); // Remove from available targets
                     } else {
-                        break; // No more valid targets
+                        break;
                     }
                 }
             }
@@ -938,7 +942,6 @@
                     if (enemy.isDead) continue;
                     if (dist(this.x, this.y, enemy.x, enemy.y) < this.skillE.radius) {
                         enemy.takeDamage(this.skillE.damage);
-                        // Apply knockback
                         const angleToEnemy = Math.atan2(enemy.y - this.y, enemy.x - this.x);
                         enemy.applyKnockback(Math.cos(angleToEnemy) * this.skillE.knockback, Math.sin(angleToEnemy) * this.skillE.knockback);
                     }
@@ -949,16 +952,13 @@
                 this.skillRMB.lastUsed = performance.now();
                 this.skillRMB.isActive = true;
                 this.skillRMB.activeTimer = 0;
-                // Create the single laser effect object here
-                // Initial x2, y2 can be player's position, will be updated in player.update
                 this.activeLaserEffect = new LaserEffect(this.x, this.y, this.x, this.y, COLOR_SKILL_RMB, 10, 1);
             }
 
             takeDamage(amount) {
                 this.health -= amount;
-                this.health = clamp(this.health, -Infinity, this.maxHealth); // Allow negative for display
+                this.health = clamp(this.health, -Infinity, this.maxHealth);
 
-                // Screen shake effect
                 canvas.style.transform = `translate(${Math.random() * 5 - 2.5}px, ${Math.random() * 5 - 2.5}px)`;
                 setTimeout(() => canvas.style.transform = '', 50);
             }
@@ -979,9 +979,9 @@
                 this.isDead = false;
                 this.knockbackVelX = 0;
                 this.knockbackVelY = 0;
-                this.knockbackFriction = 0.9; // Reduce knockback speed over time
+                this.knockbackFriction = 0.9;
 
-                this.oscillationTimer = 0; // For Grunt/Scout
+                this.oscillationTimer = Math.random() * Math.PI * 2; // Random start for oscillation
             }
 
             update(deltaTime) {
@@ -993,28 +993,26 @@
                 this.knockbackVelX *= this.knockbackFriction;
                 this.knockbackVelY *= this.knockbackFriction;
 
-                // Ensure knockback doesn't override movement too much or continue indefinitely
                 if (Math.abs(this.knockbackVelX) < 1) this.knockbackVelX = 0;
                 if (Math.abs(this.knockbackVelY) < 1) this.knockbackVelY = 0;
 
-                // --- Behavior ---
                 const dx = player.x - this.x;
                 const dy = player.y - this.y;
                 const angle = Math.atan2(dy, dx);
 
-                let targetSpeedX = Math.cos(angle) * this.speed;
-                let targetSpeedY = Math.sin(angle) * this.speed;
+                let moveX = Math.cos(angle) * this.speed;
+                let moveY = Math.sin(angle) * this.speed;
 
                 if (this.behavior === 'chase_oscillate') {
-                    this.oscillationTimer += deltaTime * 5; // Adjust speed of oscillation
-                    const oscillationOffset = Math.sin(this.oscillationTimer) * 50; // Max offset
-                    const oscillationAngle = angle + Math.PI / 2; // Perpendicular to movement
-                    this.x += Math.cos(oscillationAngle) * oscillationOffset * deltaTime;
-                    this.y += Math.sin(oscillationAngle) * oscillationOffset * deltaTime;
+                    this.oscillationTimer += deltaTime * 5;
+                    const oscillationOffset = Math.sin(this.oscillationTimer) * 50;
+                    const perpAngle = angle + Math.PI / 2;
+                    moveX += Math.cos(perpAngle) * oscillationOffset;
+                    moveY += Math.sin(perpAngle) * oscillationOffset;
                 }
-
-                this.x += targetSpeedX * deltaTime;
-                this.y += targetSpeedY * deltaTime;
+                
+                this.x += moveX * deltaTime;
+                this.y += moveY * deltaTime;
             }
 
             draw(ctx) {
@@ -1024,18 +1022,16 @@
                 if (this.type === 'Grunt' || this.type === 'Spitter') {
                     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 } else if (this.type === 'Scout') {
-                    // Triangle (facing player or forward)
                     ctx.save();
                     ctx.translate(this.x, this.y);
                     const angle = Math.atan2(player.y - this.y, player.x - this.x);
-                    ctx.rotate(angle + Math.PI / 2); // Rotate to face direction
-                    ctx.moveTo(0, -this.radius);
-                    ctx.lineTo(-this.radius * Math.sqrt(3) / 2, this.radius / 2);
-                    ctx.lineTo(this.radius * Math.sqrt(3) / 2, this.radius / 2);
+                    ctx.rotate(angle);
+                    ctx.moveTo(this.radius, 0);
+                    ctx.lineTo(-this.radius / 2, -this.radius * 0.866);
+                    ctx.lineTo(-this.radius / 2, this.radius * 0.866);
                     ctx.closePath();
                     ctx.restore();
                 } else if (this.type === 'Brute') {
-                    // Square
                     ctx.rect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
                 }
                 ctx.fillStyle = this.color;
@@ -1043,21 +1039,24 @@
                 ctx.shadowColor = this.color;
                 ctx.fill();
 
-                // Health bar (simple above enemy)
-                const healthBarWidth = this.radius * 2;
-                const healthBarHeight = 3;
-                const healthBarX = this.x - this.radius;
-                const healthBarY = this.y - this.radius - 10;
-                ctx.fillStyle = `rgba(255, 0, 255, 0.4)`; // Magenta background
-                ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
-                ctx.fillStyle = `rgba(0, 255, 255, 0.8)`; // Cyan fill
-                ctx.fillRect(healthBarX, healthBarY, healthBarWidth * (this.health / this.initialHealth), healthBarHeight);
-                ctx.shadowBlur = 0; // Reset shadow
+                // Health bar
+                if (this.health < this.initialHealth) {
+                    const healthBarWidth = this.radius * 2;
+                    const healthBarHeight = 3;
+                    const healthBarX = this.x - this.radius;
+                    const healthBarY = this.y - this.radius - 10;
+                    ctx.fillStyle = `rgba(255, 0, 255, 0.4)`;
+                    ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+                    ctx.fillStyle = `rgba(0, 255, 255, 0.8)`;
+                    ctx.fillRect(healthBarX, healthBarY, healthBarWidth * (this.health / this.initialHealth), healthBarHeight);
+                }
+                ctx.shadowBlur = 0;
             }
 
             takeDamage(amount) {
+                if (this.isDead) return;
                 this.health -= amount;
-                if (this.health <= 0 && !this.isDead) {
+                if (this.health <= 0) {
                     this.isDead = true;
                     currentScore += this.scoreValue;
                     this.explode();
@@ -1070,7 +1069,6 @@
             }
 
             explode() {
-                // Generate explosion particles
                 const numParticles = 20 + Math.random() * 10;
                 for (let i = 0; i < numParticles; i++) {
                     const angle = Math.random() * Math.PI * 2;
@@ -1081,7 +1079,6 @@
                     particles.push(new Particle(this.x, this.y, Math.cos(angle) * speed, Math.sin(angle) * speed, size, lifetime, color, color));
                 }
 
-                // Small screen shake on large enemy explosion
                 if (this.type === 'Brute') {
                     canvas.style.transform = `translate(${Math.random() * 8 - 4}px, ${Math.random() * 8 - 4}px)`;
                     setTimeout(() => canvas.style.transform = '', 70);
@@ -1101,8 +1098,8 @@
                 this.velY = velY * speed;
                 this.damage = damage;
                 this.radius = 5;
-                this.color = (owner === 'player') ? COLOR_PLAYER_BULLET : COLOR_ENEMY_GRUNT; // Placeholder for enemy bullet color
-                this.owner = owner; // 'player' or 'enemy'
+                this.color = (owner === 'player') ? COLOR_PLAYER_BULLET : COLOR_ENEMY_GRUNT;
+                this.owner = owner;
                 this.isActive = true;
             }
 
@@ -1112,7 +1109,6 @@
                 this.x += this.velX * deltaTime;
                 this.y += this.velY * deltaTime;
 
-                // Deactivate if off-screen
                 if (this.x < -this.radius || this.x > CANVAS_WIDTH + this.radius ||
                     this.y < -this.radius || this.y > CANVAS_HEIGHT + this.radius) {
                     this.isActive = false;
@@ -1130,12 +1126,11 @@
                 ctx.fill();
                 ctx.shadowBlur = 0;
 
-                // Add small particle trail
                 if (this.owner === 'player') {
                     particles.push(new Particle(
-                        this.x - this.velX * deltaTime * 5, // Slightly behind bullet
+                        this.x - this.velX * deltaTime * 5,
                         this.y - this.velY * deltaTime * 5,
-                        -this.velX * 0.1, // Small backward velocity
+                        -this.velX * 0.1,
                         -this.velY * 0.1,
                         2 + Math.random() * 2,
                         0.2 + Math.random() * 0.2,
@@ -1157,50 +1152,35 @@
                 this.velX = velX;
                 this.velY = velY;
                 this.size = size;
-                this.lifetime = lifetime; // In seconds
+                this.lifetime = lifetime;
                 this.timeAlive = 0;
                 this.color = color;
-                this.glowColor = glowColor || color; // Color for the 'lighter' blend
+                this.glowColor = glowColor || color;
                 this.isActive = true;
             }
 
             update(deltaTime) {
                 if (!this.isActive) return;
-
                 this.x += this.velX * deltaTime;
                 this.y += this.velY * deltaTime;
                 this.timeAlive += deltaTime;
-
-                if (this.timeAlive >= this.lifetime) {
-                    this.isActive = false;
-                }
+                if (this.timeAlive >= this.lifetime) this.isActive = false;
             }
 
             draw(ctx) {
                 if (!this.isActive) return;
-
                 const alpha = 1 - (this.timeAlive / this.lifetime);
                 ctx.globalAlpha = alpha;
-
-                // Draw solid core
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size * 0.6, 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.fill();
-
-                // Draw glow (using lighter blend mode)
                 ctx.globalCompositeOperation = 'lighter';
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fillStyle = this.glowColor;
                 ctx.fill();
-                ctx.globalCompositeOperation = 'source-over'; // Reset blend mode
-
-                ctx.globalAlpha = 1; // Reset alpha
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1;
             }
         }
 
-        // New Class for Laser Beam visual
         class LaserEffect {
             constructor(x1, y1, x2, y2, color, width, alpha) {
                 this.x1 = x1;
@@ -1223,10 +1203,9 @@
                 ctx.shadowColor = this.color;
                 ctx.stroke();
 
-                // Add central white core for laser
                 ctx.strokeStyle = '#FFFFFF';
                 ctx.lineWidth = this.width * 0.4;
-                ctx.shadowBlur = 0; // Don't re-apply glow for core
+                ctx.shadowBlur = 0;
                 ctx.stroke();
 
                 ctx.globalAlpha = 1;
@@ -1239,59 +1218,44 @@
         let playerPrevY = CANVAS_HEIGHT / 2;
 
         function createStars() {
-            for (let i = 0; i < 400; i++) { // More stars for better parallax
+            for (let i = 0; i < 400; i++) {
                 stars.push({
                     x: Math.random() * CANVAS_WIDTH,
                     y: Math.random() * CANVAS_HEIGHT,
                     size: Math.random() * 2,
-                    // layer 0: furthest, layer 2: closest
                     layer: Math.floor(Math.random() * 3)
                 });
             }
         }
 
         function drawStars(ctx) {
-            // Calculate player movement delta
             const dx = player.x - playerPrevX;
             const dy = player.y - playerPrevY;
 
-            ctx.fillStyle = '#FFFFFF'; // White stars
+            ctx.fillStyle = '#FFFFFF';
             for (const star of stars) {
-                let parallaxSpeed;
-                let alphaMultiplier;
+                let parallaxSpeed, alphaMultiplier;
                 switch (star.layer) {
-                    case 0: // Furthest
-                        parallaxSpeed = 0.05;
-                        alphaMultiplier = 0.4;
-                        break;
-                    case 1: // Middle
-                        parallaxSpeed = 0.15;
-                        alphaMultiplier = 0.6;
-                        break;
-                    case 2: // Closest
-                        parallaxSpeed = 0.3;
-                        alphaMultiplier = 0.8;
-                        break;
+                    case 0: parallaxSpeed = 0.05; alphaMultiplier = 0.4; break;
+                    case 1: parallaxSpeed = 0.15; alphaMultiplier = 0.6; break;
+                    case 2: parallaxSpeed = 0.3; alphaMultiplier = 0.8; break;
                 }
 
-                // Apply parallax movement based on player's movement
                 star.x -= dx * parallaxSpeed;
                 star.y -= dy * parallaxSpeed;
 
-                // Wrap around when off-screen
                 if (star.x < 0) star.x += CANVAS_WIDTH;
                 if (star.x > CANVAS_WIDTH) star.x -= CANVAS_WIDTH;
                 if (star.y < 0) star.y += CANVAS_HEIGHT;
                 if (star.y > CANVAS_HEIGHT) star.y -= CANVAS_HEIGHT;
 
-                ctx.globalAlpha = star.size / 2 * alphaMultiplier; // Brighter for closer layers
+                ctx.globalAlpha = star.size / 2 * alphaMultiplier;
                 ctx.beginPath();
                 ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.globalAlpha = 1; // Reset for next draw calls
             }
+            ctx.globalAlpha = 1;
 
-            // Update previous player position for next frame's calculation
             playerPrevX = player.x;
             playerPrevY = player.y;
         }
@@ -1299,8 +1263,8 @@
 
         // --- Crosshair Drawing ---
         function drawCrosshair(ctx) {
-            const size = 20; // Length of each arm
-            const gap = 5; // Gap from center dot
+            const size = 20;
+            const gap = 5;
             const thickness = 2;
 
             ctx.strokeStyle = COLOR_CROSSHAIR;
@@ -1308,7 +1272,6 @@
             ctx.shadowBlur = 10;
             ctx.shadowColor = COLOR_CROSSHAIR;
 
-            // Horizontal line
             ctx.beginPath();
             ctx.moveTo(mouse.x - size - gap, mouse.y);
             ctx.lineTo(mouse.x - gap, mouse.y);
@@ -1316,7 +1279,6 @@
             ctx.lineTo(mouse.x + size + gap, mouse.y);
             ctx.stroke();
 
-            // Vertical line
             ctx.beginPath();
             ctx.moveTo(mouse.x, mouse.y - size - gap);
             ctx.lineTo(mouse.x, mouse.y - gap);
@@ -1324,13 +1286,12 @@
             ctx.lineTo(mouse.x, mouse.y + size + gap);
             ctx.stroke();
 
-            // Center dot
             ctx.beginPath();
             ctx.arc(mouse.x, mouse.y, thickness * 1.5, 0, Math.PI * 2);
             ctx.fillStyle = COLOR_CROSSHAIR;
             ctx.fill();
 
-            ctx.shadowBlur = 0; // Reset shadow
+            ctx.shadowBlur = 0;
         }
 
 
@@ -1342,30 +1303,25 @@
             canvas.width = CANVAS_WIDTH;
             canvas.height = CANVAS_HEIGHT;
 
-            // Load game data at start
             loadGame();
-            showScreen('main-menu'); // Always start with main menu
+            showScreen('main-menu');
 
-            // Event Listeners
             startGameBtn.addEventListener('click', startGame);
             upgradesBtn.addEventListener('click', () => showScreen('upgrade-screen'));
             backFromUpgradesBtn.addEventListener('click', () => showScreen('main-menu'));
             returnToMainMenuBtn.addEventListener('click', () => showScreen('main-menu'));
 
-            resumeGameBtn.addEventListener('click', resumeGame); // New: Resume button
-            exitGameBtn.addEventListener('click', () => { // New: Exit button logic
-                endGame(); // End the current game session and return to main menu
+            resumeGameBtn.addEventListener('click', resumeGame);
+            exitGameBtn.addEventListener('click', () => {
+                endGame();
             });
 
             document.addEventListener('keydown', (e) => {
                 keys[e.key.toLowerCase()] = true;
-                if (e.key.toLowerCase() === 'p' || e.key === 'escape') { // New: Pause key
-                    if (gameRunning && !player.isDead) { // Only pause if game is actively running and player is alive
-                        if (gamePaused) {
-                            resumeGame();
-                        } else {
-                            pauseGame();
-                        }
+                if (e.key.toLowerCase() === 'p' || e.key === 'escape') {
+                    if (gameRunning && !player.isDead) {
+                        if (gamePaused) resumeGame();
+                        else pauseGame();
                     }
                 }
             });
@@ -1385,40 +1341,44 @@
                 if (e.button === 0) mouse.leftPressed = false;
                 if (e.button === 2) mouse.rightPressed = false;
             });
-            canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent right-click context menu
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-            createStars(); // Initialize background stars
+            createStars();
         }
 
         function startGame() {
-            // Reset game state
             player = new Player();
+            // CORRECTED: Apply upgrades after player object is created and assigned
+            updatePlayerStatsFromUpgrades();
+
             enemies = [];
             playerProjectiles = [];
             particles = [];
             lightningEffects = [];
             waveEffects = [];
-            player.activeLaserEffect = null; // Ensure no laser effect persists
+            player.activeLaserEffect = null;
 
             currentScore = 0;
-            currentWave = 0; // Start at 0, first call to startNextWave will make it 1
+            currentWave = 0;
             enemiesSpawnedThisWave = 0;
             lastEnemySpawnTime = 0;
-            waveTextDisplayTime = performance.now(); // Show "Wave 1" text immediately
+            waveTextDisplayTime = performance.now();
 
-            playerPrevX = player.x; // Initialize for parallax
+            playerPrevX = player.x;
             playerPrevY = player.y;
 
-            startNextWave(); // Start first wave
+            startNextWave();
             showScreen('game');
         }
 
         function endGame() {
+            if (!gameRunning && !gamePaused) return; // Prevent multiple calls
+
             gameRunning = false;
-            gamePaused = false; // Ensure game is unpaused before showing game over
+            gamePaused = false;
             cancelAnimationFrame(animationFrameId);
 
-            playerMoney += currentScore; // 1:1 score to money conversion
+            playerMoney += currentScore;
             if (currentScore > highScore) {
                 highScore = currentScore;
             }
@@ -1438,59 +1398,38 @@
 
         function resumeGame() {
             gamePaused = false;
-            showScreen('game'); // This will restart the game loop
+            showScreen('game');
         }
 
         function startNextWave() {
             currentWave++;
             enemiesSpawnedThisWave = 0;
-            lastEnemySpawnTime = 0; // Reset spawn timer for new wave
-            waveTextDisplayTime = performance.now(); // Reset timer for wave text
+            lastEnemySpawnTime = 0;
+            waveTextDisplayTime = performance.now();
             enemiesInWave = WAVE_INITIAL_ENEMY_COUNT + (currentWave - 1) * WAVE_ENEMY_COUNT_PER_WAVE;
         }
 
         function spawnEnemy() {
-            if (enemiesSpawnedThisWave >= enemiesInWave) return; // All enemies for this wave spawned
+            if (enemiesSpawnedThisWave >= enemiesInWave) return;
 
-            let type, hp, speed, radius, color, behavior, scoreValue;
             const enemyChoices = [];
-
             if (currentWave >= 1) enemyChoices.push({ type: 'Grunt', hp: 15, speed: 120, radius: 10, color: COLOR_ENEMY_GRUNT, behavior: 'chase_oscillate', score: 10 });
             if (currentWave >= 2) enemyChoices.push({ type: 'Scout', hp: 10, speed: 200, radius: 12, color: COLOR_ENEMY_SCOUT, behavior: 'chase_oscillate', score: 15 });
             if (currentWave >= 4) enemyChoices.push({ type: 'Brute', hp: 40, speed: 80, radius: 25, color: COLOR_ENEMY_BRUTE, behavior: 'chase_direct', score: 30 });
-            // If currentWave >= 6 and Spitter was implemented, add it here
 
-            const selectedEnemyDef = enemyChoices[Math.floor(Math.random() * enemyChoices.length)];
-            type = selectedEnemyDef.type;
-            hp = selectedEnemyDef.hp;
-            speed = selectedEnemyDef.speed;
-            radius = selectedEnemyDef.radius;
-            color = selectedEnemyDef.color;
-            behavior = selectedEnemyDef.behavior;
-            scoreValue = selectedEnemyDef.score;
+            const def = enemyChoices[Math.floor(Math.random() * enemyChoices.length)];
+            
+            let hp = def.hp * (1 + (currentWave - 1) * WAVE_ENEMY_HP_SCALING);
+            let speed = def.speed * (1 + (currentWave - 1) * WAVE_ENEMY_SPEED_SCALING);
 
-            // Apply wave scaling
-            hp *= (1 + (currentWave - 1) * WAVE_ENEMY_HP_SCALING);
-            speed *= (1 + (currentWave - 1) * WAVE_ENEMY_SPEED_SCALING);
-
-            // Random spawn position outside canvas
             let x, y;
-            const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
-            if (side === 0) { // Top
-                x = Math.random() * CANVAS_WIDTH;
-                y = -ENEMY_SPAWN_OFFSET;
-            } else if (side === 1) { // Right
-                x = CANVAS_WIDTH + ENEMY_SPAWN_OFFSET;
-                y = Math.random() * CANVAS_HEIGHT;
-            } else if (side === 2) { // Bottom
-                x = Math.random() * CANVAS_WIDTH;
-                y = CANVAS_HEIGHT + ENEMY_SPAWN_OFFSET;
-            } else { // Left
-                x = -ENEMY_SPAWN_OFFSET;
-                y = Math.random() * CANVAS_HEIGHT;
-            }
+            const side = Math.floor(Math.random() * 4);
+            if (side === 0) { x = Math.random() * CANVAS_WIDTH; y = -ENEMY_SPAWN_OFFSET; } 
+            else if (side === 1) { x = CANVAS_WIDTH + ENEMY_SPAWN_OFFSET; y = Math.random() * CANVAS_HEIGHT; } 
+            else if (side === 2) { x = Math.random() * CANVAS_WIDTH; y = CANVAS_HEIGHT + ENEMY_SPAWN_OFFSET; } 
+            else { x = -ENEMY_SPAWN_OFFSET; y = Math.random() * CANVAS_HEIGHT; }
 
-            enemies.push(new Enemy(type, x, y, hp, speed, radius, color, behavior, scoreValue));
+            enemies.push(new Enemy(def.type, x, y, hp, speed, def.radius, def.color, def.behavior, def.score));
             enemiesSpawnedThisWave++;
         }
 
@@ -1506,8 +1445,8 @@
 
                     if (dist(proj.x, proj.y, enemy.x, enemy.y) < proj.radius + enemy.radius) {
                         enemy.takeDamage(proj.damage);
-                        proj.isActive = false; // Projectile disappears on hit
-                        break; // Stop checking for this projectile
+                        proj.isActive = false;
+                        break;
                     }
                 }
             }
@@ -1518,13 +1457,11 @@
                 if (enemy.isDead) continue;
 
                 if (dist(player.x, player.y, enemy.x, enemy.y) < player.radius + enemy.radius) {
-                    player.takeDamage(10); // Player takes damage on contact
-                    enemy.takeDamage(5); // Enemy also takes minor damage
-                    // Apply knockback to player
+                    player.takeDamage(10);
+                    enemy.takeDamage(5);
                     const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
-                    player.x += Math.cos(angleToPlayer) * 15; // Small push
+                    player.x += Math.cos(angleToPlayer) * 15;
                     player.y += Math.sin(angleToPlayer) * 15;
-                    // Clamp player within bounds after knockback
                     player.x = clamp(player.x, player.radius, CANVAS_WIDTH - player.radius);
                     player.y = clamp(player.y, player.radius, CANVAS_HEIGHT - player.radius);
                 }
@@ -1532,29 +1469,21 @@
 
             // Laser Beam vs Enemy
             if (player.skillRMB.isActive && player.activeLaserEffect) {
-                const laserX1 = player.activeLaserEffect.x1;
-                const laserY1 = player.activeLaserEffect.y1;
-                const laserX2 = player.activeLaserEffect.x2;
-                const laserY2 = player.activeLaserEffect.y2;
+                const { x1, y1, x2, y2 } = player.activeLaserEffect;
+                const lineLengthSq = (x2 - x1)**2 + (y2 - y1)**2;
 
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     const enemy = enemies[i];
                     if (enemy.isDead) continue;
+                    if (lineLengthSq === 0) continue;
 
-                    // Simple line-circle intersection check (approximation for a thick laser)
-                    const lineLength = dist(laserX1, laserY1, laserX2, laserY2);
-                    if (lineLength === 0) continue; // Avoid division by zero
-
-                    const dot = (((enemy.x - laserX1) * (laserX2 - laserX1)) + ((enemy.y - laserY1) * (laserY2 - laserY1))) / Math.pow(lineLength, 2);
-
-                    const closestX = laserX1 + (dot * (laserX2 - laserX1));
-                    const closestY = laserY1 + (dot * (laserY2 - laserY1));
-
-                    // Check if closest point is within the line segment
-                    const onSegment = dot >= 0 && dot <= 1; // More robust check
-
-                    if (onSegment && dist(closestX, closestY, enemy.x, enemy.y) < enemy.radius + player.activeLaserEffect.width / 2) { // Add laser width
-                        enemy.takeDamage(player.skillRMB.damagePerFrame * deltaTime * 60); // Apply damage per second, approximated
+                    let t = ((enemy.x - x1) * (x2 - x1) + (enemy.y - y1) * (y2 - y1)) / lineLengthSq;
+                    t = Math.max(0, Math.min(1, t)); // Clamp to line segment
+                    const closestX = x1 + t * (x2 - x1);
+                    const closestY = y1 + t * (y2 - y1);
+                    
+                    if (dist(closestX, closestY, enemy.x, enemy.y) < enemy.radius + player.activeLaserEffect.width / 2) {
+                        enemy.takeDamage(player.skillRMB.damagePerFrame * deltaTime * 60);
                     }
                 }
             }
@@ -1562,81 +1491,63 @@
 
 
         function gameLoop(timestamp) {
-            // Stop loop if game is not running or is paused
             if (!gameRunning || gamePaused) {
-                cancelAnimationFrame(animationFrameId); // Ensure loop stops
+                cancelAnimationFrame(animationFrameId);
                 return;
             }
 
-            deltaTime = (timestamp - lastTime) / 1000; // Convert to seconds
+            deltaTime = (timestamp - lastTime) / 1000;
             lastTime = timestamp;
 
             // --- Update Game State ---
             player.update(deltaTime);
 
-            // Update and filter enemies
             enemies = enemies.filter(enemy => {
                 enemy.update(deltaTime);
                 return !enemy.isDead;
             });
 
-            // Handle enemy spawning
             const spawnInterval = Math.max(WAVE_SPAWN_INTERVAL_MIN, WAVE_SPAWN_INTERVAL_BASE - (currentWave - 1) * WAVE_SPAWN_INTERVAL_DECREASE);
-            if (enemies.length < enemiesInWave && enemiesSpawnedThisWave < enemiesInWave && (performance.now() - lastEnemySpawnTime > spawnInterval)) {
+            if (enemiesSpawnedThisWave < enemiesInWave && (performance.now() - lastEnemySpawnTime > spawnInterval)) {
                 spawnEnemy();
                 lastEnemySpawnTime = performance.now();
             }
 
-            // Check for wave completion
             if (enemies.length === 0 && enemiesSpawnedThisWave >= enemiesInWave) {
                 startNextWave();
             }
 
-            // Update and filter player projectiles
             playerProjectiles = playerProjectiles.filter(proj => {
                 proj.update(deltaTime);
-                if (!proj.isActive) pool.returnProjectile(proj); // Return to pool
+                if (!proj.isActive) pool.returnProjectile(proj);
                 return proj.isActive;
             });
 
-            // Update and filter particles
             particles = particles.filter(p => {
                 p.update(deltaTime);
-                if (!p.isActive) pool.returnParticle(p); // Return to pool
+                if (!p.isActive) pool.returnParticle(p);
                 return p.isActive;
             });
 
-            // Update and filter skill effects
-            lightningEffects = lightningEffects.filter(e => {
-                e.lifetime -= deltaTime;
-                return e.lifetime > 0;
-            });
-            waveEffects = waveEffects.filter(e => {
-                e.radius += e.speed * deltaTime;
-                e.alpha = 1 - (e.radius / e.maxRadius); // Fade out as it expands
-                return e.radius < e.maxRadius;
-            });
-            // Laser effect is now updated within player.update() and drawn directly
-            // No need to clear a list here
+            lightningEffects = lightningEffects.filter(e => { e.lifetime -= deltaTime; return e.lifetime > 0; });
+            waveEffects = waveEffects.filter(e => { e.radius += e.speed * deltaTime; e.alpha = 1 - (e.radius / e.maxRadius); return e.radius < e.maxRadius; });
 
-            checkCollisions(); // Handle all collisions
+            checkCollisions();
 
             // --- Drawing ---
-            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-            drawStars(ctx); // Draw parallax background stars
+            drawStars(ctx);
 
-            // Draw game entities
             player.draw(ctx);
             playerProjectiles.forEach(proj => proj.draw(ctx));
             enemies.forEach(enemy => enemy.draw(ctx));
             particles.forEach(p => p.draw(ctx));
 
-            // Draw skill effects (on top of entities, but beneath UI)
+            // Draw skill effects
             lightningEffects.forEach(e => {
-                ctx.globalAlpha = e.lifetime / 0.2; // Fade out based on remaining lifetime
+                ctx.globalAlpha = e.lifetime / 0.2;
                 ctx.beginPath();
-                // Draw jagged line
                 ctx.moveTo(e.x1, e.y1);
                 const segments = 5;
                 for (let i = 1; i <= segments; i++) {
@@ -1644,7 +1555,7 @@
                     const midX = e.x1 + (e.x2 - e.x1) * frac;
                     const midY = e.y1 + (e.y2 - e.y1) * frac;
                     const perpAngle = Math.atan2(e.y2 - e.y1, e.x2 - e.x1) + Math.PI / 2;
-                    const offset = (Math.random() - 0.5) * 20; // Random jiggle
+                    const offset = (Math.random() - 0.5) * 20;
                     ctx.lineTo(midX + Math.cos(perpAngle) * offset, midY + Math.sin(perpAngle) * offset);
                 }
                 ctx.lineTo(e.x2, e.y2);
@@ -1660,57 +1571,41 @@
 
             waveEffects.forEach(e => {
                 ctx.globalAlpha = e.alpha;
-                // Inner white ring
-                ctx.beginPath();
-                ctx.arc(e.x, e.y, e.radius * 0.8, 0, Math.PI * 2); // Slightly smaller radius
                 ctx.strokeStyle = COLOR_SKILL_E_INNER;
                 ctx.lineWidth = 3;
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = COLOR_SKILL_E_INNER;
-                ctx.stroke();
-
-                // Outer orange glow ring
-                ctx.beginPath();
-                ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+                ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 0.8, 0, Math.PI * 2); ctx.stroke();
+                
                 ctx.strokeStyle = COLOR_SKILL_E_OUTER;
                 ctx.lineWidth = 8;
                 ctx.shadowBlur = 25;
                 ctx.shadowColor = COLOR_SKILL_E_OUTER;
-                ctx.stroke();
+                ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.stroke();
                 ctx.shadowBlur = 0;
                 ctx.globalAlpha = 1;
             });
 
-            // Draw the single active laser effect if it exists
             if (player.activeLaserEffect) {
                 player.activeLaserEffect.draw(ctx);
             }
 
-
             // --- Draw Wave Announcement ---
             if (performance.now() - waveTextDisplayTime < WAVE_TEXT_DURATION) {
                 const elapsed = performance.now() - waveTextDisplayTime;
-                let alpha = 0;
-                let scale = 1;
+                let alpha = 0, scale = 1;
 
-                if (elapsed < 500) { // Fade in and grow
-                    alpha = elapsed / 500;
-                    scale = 0.5 + 0.5 * (elapsed / 500);
-                } else if (elapsed < WAVE_TEXT_DURATION - 500) { // Hold
-                    alpha = 1;
-                    scale = 1.5;
-                } else { // Fade out and shrink
-                    alpha = 1 - (elapsed - (WAVE_TEXT_DURATION - 500)) / 500;
-                    scale = 1.5 - 0.5 * (elapsed - (WAVE_TEXT_DURATION - 500)) / 500;
-                }
+                if (elapsed < 500) { alpha = elapsed / 500; scale = 0.5 + 0.5 * alpha; } 
+                else if (elapsed < WAVE_TEXT_DURATION - 500) { alpha = 1; scale = 1.5; } 
+                else { alpha = 1 - (elapsed - (WAVE_TEXT_DURATION - 500)) / 500; scale = 1.5 - 0.5 * (1 - alpha); }
                 
                 alpha = clamp(alpha, 0, 1);
                 scale = clamp(scale, 0.5, 1.5);
 
                 ctx.save();
                 ctx.globalAlpha = alpha;
-                ctx.fillStyle = COLOR_PLAYER; // Cyan for wave text
-                ctx.font = `${70 * scale}px Arial Bold`;
+                ctx.fillStyle = COLOR_PLAYER;
+                ctx.font = `bold ${70 * scale}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.shadowBlur = 20;
@@ -1719,16 +1614,12 @@
                 ctx.restore();
             }
 
-            // --- Draw Crosshair (always on top in game) ---
             drawCrosshair(ctx);
-
-            // --- Update HUD ---
             updateHUD();
 
             animationFrameId = requestAnimationFrame(gameLoop);
         }
 
-        // Initialize the game when the window loads
         window.onload = initGame;
     </script>
 </body>
