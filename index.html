@@ -87,7 +87,7 @@
             display: none; /* Hidden by default */
         }
 
-        #score-display, #wave-display, #health-bar-container {
+        #score-display, #wave-display, #health-bar-container, #laser-charge-container {
             position: absolute;
             color: #FFFFFF;
             font-size: 1.5em;
@@ -116,6 +116,27 @@
             transition: width 0.1s linear; /* Smooth health change */
             box-shadow: 0 0 5px #00FFFF;
         }
+        
+        #laser-charge-container { /* New style for laser charge bar */
+            top: 140px; /* Position below health bar */
+            left: 20px;
+            width: 200px; 
+            height: 15px;
+            background-color: rgba(0, 0, 0, 0.5); /* Dark background */
+            border: 2px solid #FF00FF; /* Magenta border */
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 0 8px rgba(255, 0, 255, 0.5);
+        }
+
+        #laser-charge-bar {
+            height: 100%;
+            width: 0%; /* Starts empty */
+            background-color: #FF00FF; /* Magenta fill */
+            transition: width 0.05s linear; /* Fast transition */
+            box-shadow: 0 0 5px #FF00FF;
+        }
+
 
         #skill-hud {
             position: absolute;
@@ -298,6 +319,9 @@
         <div id="health-bar-container">
             <div id="health-bar"></div>
         </div>
+        <div id="laser-charge-container"> <!-- New element for laser charge bar -->
+            <div id="laser-charge-bar"></div>
+        </div>
         <div id="skill-hud">
             <div id="skill-q" class="skill-icon ready">Q<div class="skill-cooldown" style="display: none;"></div></div>
             <div id="skill-e" class="skill-icon ready">E<div class="skill-cooldown" style="display: none;"></div></div>
@@ -315,41 +339,49 @@
         const PLAYER_FIRE_RATE_BASE = 8; // shots per second
         const PLAYER_BULLET_DAMAGE_BASE = 10;
         const PLAYER_HEALTH_REGEN_BASE = 0.5; // health per second
-        const PLAYER_BULLETS_PER_SHOT_BASE = 1; // NEW: Base value for multi-shot
+        const PLAYER_BULLETS_PER_SHOT_BASE = 1; 
 
         const SKILL_Q_DAMAGE_BASE = 40;
         const SKILL_Q_TARGETS_BASE = 4;
         const SKILL_Q_COOLDOWN = 8; // seconds
 
-        const SKILL_E_DAMAGE_BASE = 20;
+        const SKILL_E_DAMAGE_BASE = 20; 
         const SKILL_E_RADIUS_BASE = 200;
         const SKILL_E_KNOCKBACK_BASE = 50;
         const SKILL_E_COOLDOWN = 6; // seconds
 
-        const SKILL_RMB_DAMAGE_BASE = 10; // damage per frame
-        const SKILL_RMB_DURATION_BASE = 300; // milliseconds
-        const SKILL_RMB_COOLDOWN = 10; // seconds
+        const SKILL_RMB_DAMAGE_BASE = 35; // damage per frame, UPDATED
+        const SKILL_RMB_COOLDOWN = 10; // seconds - This is now the BASE time to fully recharge the laser from 0 to max charge
 
+        // NEW: Laser Charge Configuration
+        const PLAYER_LASER_DRAIN_PER_SECOND_BASE = 60; // How many charge units are consumed per second (base, for easier balancing)
+        const PLAYER_LASER_ACTIVE_SECONDS_BASE = 1; // How many seconds the laser can fire from full charge (base)
+        const PLAYER_LASER_MAX_CHARGE_BASE = PLAYER_LASER_DRAIN_PER_SECOND_BASE * PLAYER_LASER_ACTIVE_SECONDS_BASE; // Total charge units
+
+        // Regenerate rate is calculated to match SKILL_RMB_COOLDOWN duration from empty to full at base level
+        const PLAYER_LASER_CHARGE_REGEN_RATE_BASE = PLAYER_LASER_MAX_CHARGE_BASE / SKILL_RMB_COOLDOWN; // units per second
+        
         const BULLET_SPEED = 800; // pixels per second
         const ENEMY_SPAWN_OFFSET = 50; // Spawn enemies this far off screen
 
         const WAVE_INITIAL_ENEMY_COUNT = 8;
-        const WAVE_ENEMY_COUNT_PER_WAVE = 3;
-        const WAVE_ENEMY_HP_SCALING = 0.18; // 18% per wave after wave 1
-        const WAVE_ENEMY_SPEED_SCALING = 0.06; // 6% per wave after wave 1
+        const WAVE_ENEMY_COUNT_PER_WAVE = 10; // UPDATED to 10
+        const WAVE_ENEMY_HP_SCALING = 0.25; // UPDATED to 25%
+        const WAVE_ENEMY_SPEED_SCALING = 0.001; // UPDATED to 0.1%
         const WAVE_SPAWN_INTERVAL_BASE = 500; // ms
         const WAVE_SPAWN_INTERVAL_DECREASE = 20; // ms per wave
         const WAVE_SPAWN_INTERVAL_MIN = 100; // ms
 
         // --- BOSS Constants ---
         const BOSS_WAVE_INTERVAL = 10;
-        const BOSS_HEALTH_BASE = 5000;
+        const BOSS_HEALTH_BASE = 50000; // UPDATED to 10x original (5000 * 10)
         const BOSS_SCORE_VALUE = 1000;
         const BOSS_SPEED = 50; // pixels per second for side-to-side movement
         const BOSS_MISSILE_FIRE_RATE = 2; // missiles per second
         const MISSILE_SPEED = 150; // pixels per second
         const MISSILE_TURN_RATE = Math.PI / 1.5; // radians per second
         const MISSILE_DAMAGE = 15; // Damage to player
+        const BOSS_SHIELD_FLASH_DURATION = 100; // ms for shield flash effect
 
         // --- Colors ---
         const COLOR_PLAYER = '#00FFFF'; // Cyan
@@ -368,6 +400,7 @@
         const COLOR_BOSS_CORE = '#FF00FF'; // Bright Magenta
         const COLOR_MISSILE = '#FFA500'; // Orange
         const COLOR_MISSILE_TRAIL = '#FF4500'; // OrangeRed
+        const COLOR_BOSS_SHIELD_FLASH = 'rgba(0, 255, 255, 0.7)'; // Cyan with alpha for shield
 
         // --- Permanent Upgrade Definitions ---
         const UPGRADES_DEFINITION = {
@@ -381,10 +414,10 @@
                 baseValue: PLAYER_FIRE_RATE_BASE, increment: 1.10, type: 'multiply',
                 initialPrice: 60, priceFactor: 1.4
             },
-            'bulletsPerShot': { // NEW UPGRADE
+            'bulletsPerShot': { 
                 category: '基礎', name: '多重射擊', effect: '每次射擊發射的子彈數量',
                 baseValue: PLAYER_BULLETS_PER_SHOT_BASE, increment: 1,
-                initialPrice: 75, priceFactor: 1.4 // Slightly more than damage, less than fire rate
+                initialPrice: 75, priceFactor: 1.4 
             },
             'maxHealth': {
                 category: '基礎', name: '最大生命', effect: '提升生命值上限',
@@ -426,10 +459,15 @@
                 baseValue: SKILL_Q_DAMAGE_BASE, increment: 12,
                 initialPrice: 180, priceFactor: 1.55
             },
-            'laserDuration': {
-                category: '雷射 [右鍵]', name: '持續時間', effect: '增加雷射光束的持續時間',
-                baseValue: SKILL_RMB_DURATION_BASE, increment: 60,
+            'laserMaxCharge': { 
+                category: '雷射 [右鍵]', name: '最大充能', effect: '增加雷射武器的最大能量儲備',
+                baseValue: PLAYER_LASER_MAX_CHARGE_BASE, increment: 10, // UPDATED
                 initialPrice: 140, priceFactor: 1.52
+            },
+            'laserChargeRegen': { 
+                category: '雷射 [右鍵]', name: '充能速度', effect: '提升雷射武器的能量恢復速度',
+                baseValue: PLAYER_LASER_CHARGE_REGEN_RATE_BASE, increment: 1, // UPDATED
+                initialPrice: 100, priceFactor: 1.45
             },
             'laserDamage': {
                 category: '雷射 [右鍵]', name: '傷害', effect: '增加雷射每幀造成的傷害',
@@ -453,7 +491,7 @@
         let playerProjectiles = [];
         let particles = [];
         let lightningEffects = [];
-        let waveEffects = [];
+        let waveEffects = []; 
         let boss = null; 
         let missiles = []; 
 
@@ -472,7 +510,7 @@
         let playerUpgradeLevels = {};
 
         // --- Mouse and Keyboard Input ---
-        const keys = {};
+        const keys = {}; 
         const mouse = { x: 0, y: 0, leftPressed: false, rightPressed: false };
 
         // === DOM Elements ===
@@ -496,6 +534,7 @@
         const scoreDisplay = document.getElementById('score-display');
         const waveDisplay = document.getElementById('wave-display');
         const healthBar = document.getElementById('health-bar');
+        const laserChargeBar = document.getElementById('laser-charge-bar'); 
         const skillQIcon = document.getElementById('skill-q');
         const skillEIcon = document.getElementById('skill-e');
         const skillRMBIcon = document.getElementById('skill-right-click');
@@ -511,27 +550,32 @@
             missiles: [], 
 
             getProjectile() {
-                // If pool is empty, create a new one, otherwise reuse
-                return this.projectiles.pop() || new Projectile(0,0,0,0,0,0);
+                return this.projectiles.length > 0 ? this.projectiles.pop() : new Projectile();
             },
             returnProjectile(proj) {
-                proj.isActive = false; // Mark as inactive for reuse
-                this.projectiles.push(proj);
+                if (proj.isActive) { 
+                    proj.isActive = false; 
+                    this.projectiles.push(proj);
+                }
             },
             getParticle() {
-                return this.particles.pop() || new Particle(0,0,0,0,0,0,0,0);
+                return this.particles.length > 0 ? this.particles.pop() : new Particle();
             },
             returnParticle(part) {
-                part.isActive = false;
-                this.particles.push(part);
+                if (part.isActive) {
+                    part.isActive = false;
+                    this.particles.push(part);
+                }
             },
             getMissile() { 
-                return this.missiles.pop() || new Missile(0,0);
+                return this.missiles.length > 0 ? this.missiles.pop() : new Missile();
             },
             returnMissile(miss) { 
-                miss.isActive = false;
-                miss.isDead = true; // Ensure it's treated as dead for skill targeting (like Q)
-                this.missiles.push(miss);
+                if (miss.isActive || !miss.isDead) { 
+                    miss.isActive = false;
+                    miss.isDead = true; 
+                    this.missiles.push(miss);
+                }
             }
         };
 
@@ -546,14 +590,26 @@
         }
 
         function loadGame() {
+            let loadedUpgradeLevels = {};
             const savedData = localStorage.getItem('chromashockArenaData');
             if (savedData) {
-                const gameData = JSON.parse(savedData);
-                playerMoney = gameData.money || 0;
-                highScore = gameData.highScore || 0;
-                playerUpgradeLevels = gameData.upgradeLevels || {};
-            } else {
-                for (const key in UPGRADES_DEFINITION) { playerUpgradeLevels[key] = 0; }
+                try {
+                    const gameData = JSON.parse(savedData);
+                    playerMoney = gameData.money || 0;
+                    highScore = gameData.highScore || 0;
+                    loadedUpgradeLevels = gameData.upgradeLevels || {};
+                } catch (e) {
+                    console.error("Failed to parse game data from localStorage, starting fresh.", e);
+                    // Clear corrupted data if parsing fails
+                    localStorage.removeItem('chromashockArenaData');
+                }
+            }
+
+            // Initialize playerUpgradeLevels based on current UPGRADES_DEFINITION
+            // and override with loaded data if available. This ensures forward compatibility.
+            playerUpgradeLevels = {};
+            for (const key in UPGRADES_DEFINITION) {
+                playerUpgradeLevels[key] = loadedUpgradeLevels[key] !== undefined ? loadedUpgradeLevels[key] : 0;
             }
         }
 
@@ -632,7 +688,8 @@
 
         function updatePlayerStatsFromUpgrades() {
             if (!player) return;
-            // Reset player stats to base before applying upgrades
+
+            // RESET ALL PLAYER STATS TO THEIR BASE VALUES FIRST
             player.maxHealth = PLAYER_MAX_HEALTH_BASE;
             player.healthRegen = PLAYER_HEALTH_REGEN_BASE;
             player.moveSpeed = PLAYER_MOVE_SPEED_BASE;
@@ -645,35 +702,43 @@
             player.skillE.damage = SKILL_E_DAMAGE_BASE;
             player.skillE.radius = SKILL_E_RADIUS_BASE;
             player.skillE.knockback = SKILL_E_KNOCKBACK_BASE;
+            
+            // Laser specific BASE resets
             player.skillRMB.damagePerFrame = SKILL_RMB_DAMAGE_BASE;
-            player.skillRMB.duration = SKILL_RMB_DURATION_BASE;
+            player.skillRMB.maxCharge = PLAYER_LASER_MAX_CHARGE_BASE; 
+            player.laserChargeRegen = PLAYER_LASER_CHARGE_REGEN_RATE_BASE; 
 
+            // THEN APPLY UPGRADES
             for (const key in playerUpgradeLevels) {
                 const level = playerUpgradeLevels[key];
-                if (!level) continue;
-                const def = UPGRADES_DEFINITION[key];
-                if (level > 0) {
-                    if (def.type === 'multiply') {
-                        const multiplier = Math.pow(def.increment, level);
-                        if (key === 'fireRate') player.fireRate *= multiplier;
-                    } else {
-                        const addedValue = def.increment * level;
-                        if (key === 'bulletDamage') player.baseBulletDamage += addedValue;
-                        else if (key === 'bulletsPerShot') player.bulletsPerShot += addedValue;
-                        else if (key === 'maxHealth') player.maxHealth += addedValue;
-                        else if (key === 'healthRegen') player.healthRegen += addedValue;
-                        else if (key === 'moveSpeed') player.moveSpeed += addedValue;
-                        else if (key === 'waveRadius') player.skillE.radius += addedValue;
-                        else if (key === 'waveDamage') player.skillE.damage += addedValue;
-                        else if (key === 'waveKnockback') player.skillE.knockback += addedValue;
-                        else if (key === 'lightningTargets') player.skillQ.targets += addedValue;
-                        else if (key === 'lightningDamage') player.skillQ.damage += addedValue;
-                        else if (key === 'laserDuration') player.skillRMB.duration += addedValue;
-                        else if (key === 'laserDamage') player.skillRMB.damagePerFrame += addedValue;
-                    }
+                if (level <= 0) continue; 
+                
+                const def = UPGRADES_DEFINITION[key]; 
+                
+                if (def.type === 'multiply') {
+                     const multiplier = Math.pow(def.increment, level);
+                     if (key === 'fireRate') player.fireRate *= multiplier;
+                } else {
+                    const addedValue = def.increment * level;
+                    if (key === 'bulletDamage') player.baseBulletDamage += addedValue;
+                    else if (key === 'bulletsPerShot') player.bulletsPerShot += addedValue;
+                    else if (key === 'maxHealth') player.maxHealth += addedValue;
+                    else if (key === 'healthRegen') player.healthRegen += addedValue;
+                    else if (key === 'moveSpeed') player.moveSpeed += addedValue;
+                    else if (key === 'waveRadius') player.skillE.radius += addedValue;
+                    else if (key === 'waveDamage') player.skillE.damage += addedValue;
+                    else if (key === 'waveKnockback') player.skillE.knockback += addedValue;
+                    else if (key === 'lightningTargets') player.skillQ.targets += addedValue;
+                    else if (key === 'lightningDamage') player.skillQ.damage += addedValue;
+                    else if (key === 'laserMaxCharge') player.skillRMB.maxCharge += addedValue; 
+                    else if (key === 'laserChargeRegen') player.laserChargeRegen += addedValue; 
+                    else if (key === 'laserDamage') player.skillRMB.damagePerFrame += addedValue;
                 }
             }
-            player.health = player.maxHealth;
+            
+            // IMPORTANT: Set current health and laser charge AFTER all upgrades are applied
+            player.health = player.maxHealth; 
+            player.laserCharge = player.skillRMB.maxCharge; 
         }
 
         function updateHUD() {
@@ -686,20 +751,33 @@
             healthBar.style.width = `${(player.health / player.maxHealth) * 100}%`;
             healthBar.style.backgroundColor = player.health <= 0 ? '#FF00FF' : COLOR_PLAYER;
 
+            // Update laser charge bar
+            laserChargeBar.style.width = `${(player.laserCharge / player.skillRMB.maxCharge) * 100}%`;
+
             updateSkillIcon(skillQIcon, player.skillQ.cooldownLeft, SKILL_Q_COOLDOWN);
             updateSkillIcon(skillEIcon, player.skillE.cooldownLeft, SKILL_E_COOLDOWN);
-            updateSkillIcon(skillRMBIcon, player.skillRMB.cooldownLeft, SKILL_RMB_COOLDOWN);
+            
+            // RMB icon state management: simply show "ready" if there's any charge, and no cooldown overlay
+            if (player.laserCharge > 0) {
+                 skillRMBIcon.classList.add('ready');
+            } else {
+                skillRMBIcon.classList.remove('ready');
+            }
+            skillRMBIcon.querySelector('.skill-cooldown').style.display = 'none'; // Never show countdown for RMB
         }
 
         function updateSkillIcon(iconElement, cooldownLeft, totalCooldown) {
             const cooldownDisplay = iconElement.querySelector('.skill-cooldown');
-            if (cooldownLeft > 0) {
-                iconElement.classList.remove('ready');
-                cooldownDisplay.style.display = 'flex';
-                cooldownDisplay.textContent = Math.ceil(cooldownLeft);
-            } else {
-                iconElement.classList.add('ready');
-                cooldownDisplay.style.display = 'none';
+            // This function is for Q and E specific. RMB handles its own display in updateHUD().
+            if (iconElement.id === 'skill-q' || iconElement.id === 'skill-e') {
+                if (cooldownLeft > 0) {
+                    iconElement.classList.remove('ready');
+                    cooldownDisplay.style.display = 'flex';
+                    cooldownDisplay.textContent = Math.ceil(cooldownLeft);
+                } else {
+                    iconElement.classList.add('ready');
+                    cooldownDisplay.style.display = 'none';
+                }
             }
         }
 
@@ -711,6 +789,8 @@
                 this.y = CANVAS_HEIGHT / 2;
                 this.radius = 15;
                 this.color = COLOR_PLAYER;
+                
+                // Base player stats (will be overridden by upgrades later)
                 this.health = PLAYER_MAX_HEALTH_BASE;
                 this.maxHealth = PLAYER_MAX_HEALTH_BASE;
                 this.healthRegen = PLAYER_HEALTH_REGEN_BASE;
@@ -719,27 +799,49 @@
                 this.fireRate = PLAYER_FIRE_RATE_BASE;
                 this.bulletsPerShot = PLAYER_BULLETS_PER_SHOT_BASE;
                 this.lastShotTime = 0;
+
                 this.skillQ = { cooldownLeft: 0, damage: SKILL_Q_DAMAGE_BASE, targets: SKILL_Q_TARGETS_BASE, lastUsed: 0 };
                 this.skillE = { cooldownLeft: 0, damage: SKILL_E_DAMAGE_BASE, radius: SKILL_E_RADIUS_BASE, knockback: SKILL_E_KNOCKBACK_BASE, lastUsed: 0 };
-                this.skillRMB = { cooldownLeft: 0, damagePerFrame: SKILL_RMB_DAMAGE_BASE, duration: SKILL_RMB_DURATION_BASE, lastUsed: 0, isActive: false, activeTimer: 0 };
+                
+                // Laser (RMB) skill properties - these base values are used
+                // before updatePlayerStatsFromUpgrades applies upgrade levels
+                this.skillRMB = { 
+                    damagePerFrame: SKILL_RMB_DAMAGE_BASE, 
+                    isActive: false, 
+                    maxCharge: PLAYER_LASER_MAX_CHARGE_BASE 
+                };
+                this.laserCharge = PLAYER_LASER_MAX_CHARGE_BASE; 
+                this.laserChargeDrainRate = PLAYER_LASER_DRAIN_PER_SECOND_BASE; 
+                this.laserChargeRegen = PLAYER_LASER_CHARGE_REGEN_RATE_BASE; 
+
                 this.isDead = false;
-                this.activeLaserEffect = null;
+                this.activeLaserEffect = null; // Visual laser effect object
             }
 
             update(deltaTime) {
                 if (this.isDead) return;
+
                 // --- Movement ---
-                let dx = 0, dy = 0;
-                if (keys['w']) dy -= 1; if (keys['s']) dy += 1;
-                if (keys['a']) dx -= 1; if (keys['d']) dx += 1;
+                let dx = 0;
+                let dy = 0;
+                if (keys['w']) dy -= 1;
+                if (keys['s']) dy += 1;
+                if (keys['a']) dx -= 1;
+                if (keys['d']) dx += 1;
+
                 if (dx !== 0 || dy !== 0) {
                     const angle = Math.atan2(dy, dx);
                     this.x += Math.cos(angle) * this.moveSpeed * deltaTime;
                     this.y += Math.sin(angle) * this.moveSpeed * deltaTime;
                 }
+
+                // Clamp player within canvas bounds
                 this.x = clamp(this.x, this.radius, CANVAS_WIDTH - this.radius);
                 this.y = clamp(this.y, this.radius, CANVAS_HEIGHT - this.radius);
+
+                // --- Aiming (from player center to mouse) ---
                 this.angle = Math.atan2(mouse.y - this.y, mouse.x - this.x);
+
                 // --- Basic Shooting ---
                 if (mouse.leftPressed && (performance.now() - this.lastShotTime) > (1000 / this.fireRate)) {
                     const numBullets = this.bulletsPerShot;
@@ -748,36 +850,120 @@
                     const startAngleOffset = numBullets > 1 ? -totalSpreadAngle / 2 : 0;
                     for (let i = 0; i < numBullets; i++) {
                         const currentBulletAngle = this.angle + startAngleOffset + (angleStep * i);
+                        // Bullet originates from the tip of the ship, aligned with aiming direction
                         const bulletX = this.x + Math.cos(currentBulletAngle) * this.radius;
                         const bulletY = this.y + Math.sin(currentBulletAngle) * this.radius;
-                        const bullet = pool.getProjectile(); // Use object pool
+                        const bullet = pool.getProjectile(); 
                         bullet.reset(bulletX, bulletY, Math.cos(currentBulletAngle), Math.sin(currentBulletAngle), BULLET_SPEED, this.baseBulletDamage, 'player');
                         playerProjectiles.push(bullet);
                     }
                     this.lastShotTime = performance.now();
                 }
-                // --- Skill Cooldowns ---
+
+                // --- Skill Cooldowns (Q and E) ---
+                // Q skill activation
+                if (keys['q'] && this.skillQ.cooldownLeft <= 0) {
+                    this.activateSkillQ();
+                    keys['q'] = false; // Reset key state after activation
+                }
+                // E skill activation
+                if (keys['e'] && this.skillE.cooldownLeft <= 0) {
+                    this.activateSkillE();
+                    keys['e'] = false; // Reset key state after activation
+                }
+                
+                // Calculate cooldowns (these are correctly done after potential activation)
                 this.skillQ.cooldownLeft = Math.max(0, SKILL_Q_COOLDOWN - (performance.now() - this.skillQ.lastUsed) / 1000);
                 this.skillE.cooldownLeft = Math.max(0, SKILL_E_COOLDOWN - (performance.now() - this.skillE.lastUsed) / 1000);
-                this.skillRMB.cooldownLeft = Math.max(0, SKILL_RMB_COOLDOWN - (performance.now() - this.skillRMB.lastUsed) / 1000);
-                // --- Skill Activation ---
-                if (keys['q'] && this.skillQ.cooldownLeft <= 0) { this.activateSkillQ(); keys['q'] = false; }
-                if (keys['e'] && this.skillE.cooldownLeft <= 0) { this.activateSkillE(); keys['e'] = false; }
-                if (mouse.rightPressed && this.skillRMB.cooldownLeft <= 0 && !this.skillRMB.isActive) { this.activateSkillRMB(); mouse.rightPressed = false; }
-                // --- Laser Beam Logic ---
-                if (this.skillRMB.isActive) {
-                    this.skillRMB.activeTimer += deltaTime * 1000;
-                    if (this.skillRMB.activeTimer >= this.skillRMB.duration) {
-                        this.skillRMB.isActive = false; this.skillRMB.activeTimer = 0; this.activeLaserEffect = null;
+                
+                // --- Laser Beam (RMB) Logic ---
+                if (mouse.rightPressed && this.laserCharge > 0) { 
+                    this.skillRMB.isActive = true;
+                    this.laserCharge = Math.max(0, this.laserCharge - this.laserChargeDrainRate * deltaTime); // Drain per second
+                    
+                    // Screen shake when laser active
+                    canvas.style.transform = `translate(${Math.random() * 3 - 1.5}px, ${Math.random() * 3 - 1.5}px)`;
+                    
+                    // Create/update visual laser effect
+                    if (!this.activeLaserEffect) {
+                         this.activeLaserEffect = new LaserEffect(0,0,0,0, COLOR_SKILL_RMB, 10, 1);
+                    }
+                    
+                    // Calculate laser path: starts from player's nose, passes through mouse, extends far.
+                    const muzzleX = this.x + Math.cos(this.angle) * this.radius;
+                    const muzzleY = this.y + Math.sin(this.angle) * this.radius;
+
+                    const vectorToMouseX = mouse.x - muzzleX;
+                    const vectorToMouseY = mouse.y - muzzleY;
+                    const distToMouse = dist(muzzleX, muzzleY, mouse.x, mouse.y);
+                    
+                    // Extend far enough to pass beyond the edge of the screen, even if aiming directly at player/close to muzzle.
+                    // Adjust extendFactor for edge cases where mouse is very close to muzzle or direct vertical/horizontal.
+                    const minExtendDistance = Math.sqrt(CANVAS_WIDTH**2 + CANVAS_HEIGHT**2); // Diagonal distance
+                    let currentExtendFactor = (distToMouse > 0) ? (minExtendDistance / distToMouse) * 1.2 : 2; // Add safety buffer and default if distToMouse is zero
+                    
+                    const farX = muzzleX + vectorToMouseX * currentExtendFactor;
+                    const farY = muzzleY + vectorToMouseY * currentExtendFactor;
+
+                    this.activeLaserEffect.x1 = muzzleX;
+                    this.activeLaserEffect.y1 = muzzleY;
+                    this.activeLaserEffect.x2 = farX;
+                    this.activeLaserEffect.y2 = farY;
+
+
+                    // Apply continuous damage to targets caught in the laser
+                    const laserX1 = this.activeLaserEffect.x1;
+                    const laserY1 = this.activeLaserEffect.y1;
+                    const laserX2 = this.activeLaserEffect.x2;
+                    const laserY2 = this.activeLaserEffect.y2;
+                    const lineLengthSq = (laserX2 - laserX1)**2 + (laserY2 - laserY1)**2;
+
+                    const targetsForLaserDamage = [];
+                    if (isBossWave) {
+                        if (boss && !boss.isDead) targetsForLaserDamage.push(boss);
                     } else {
-                        if (!this.activeLaserEffect) { this.activeLaserEffect = new LaserEffect(this.x, this.y, this.x, this.y, COLOR_SKILL_RMB, 10, 1); }
-                        this.activeLaserEffect.x1 = this.x; this.activeLaserEffect.y1 = this.y;
-                        this.activeLaserEffect.x2 = this.x + Math.cos(this.angle) * CANVAS_WIDTH * 1.5;
-                        this.activeLaserEffect.y2 = this.y + Math.sin(this.angle) * CANVAS_HEIGHT * 1.5;
+                        targetsForLaserDamage.push(...enemies); 
+                    }
+
+                    for (let i = targetsForLaserDamage.length - 1; i >= 0; i--) {
+                        const target = targetsForLaserDamage[i];
+                        if (!target || !target.isActive) continue;
+
+                        let radius;
+                        if (target instanceof Boss) radius = target.width / 2; 
+                        else radius = target.radius;
+
+                        let t = ((target.x - laserX1) * (laserX2 - laserX1) + (target.y - laserY1) * (laserY2 - laserY1)) / lineLengthSq;
+                        t = Math.max(0, Math.min(1, t));
+                        const closestX = laserX1 + t * (laserX2 - laserX1);
+                        const closestY = laserY1 + t * (laserY2 - laserY1);
+
+                        if (dist(closestX, closestY, target.x, target.y) < radius + this.activeLaserEffect.width / 2) {
+                            target.takeDamage(this.skillRMB.damagePerFrame * deltaTime * 60); // Apply damage scaled by FPS
+                        }
+                    }
+
+                } else { // Right click released OR laserCharge is 0
+                    this.skillRMB.isActive = false;
+                    this.activeLaserEffect = null;
+                    if (!mouse.rightPressed) { 
+                        canvas.style.transform = ''; // Reset screen shake only if button actually released
+                    }
+
+                    // Recharge logic: only if NOT actively firing laser AND right mouse button is NOT pressed AND not at max charge
+                    if (!this.skillRMB.isActive && !mouse.rightPressed && this.laserCharge < this.skillRMB.maxCharge) { 
+                        this.laserCharge += this.laserChargeRegen * deltaTime; // Regen per second
+                        this.laserCharge = clamp(this.laserCharge, 0, this.skillRMB.maxCharge);
                     }
                 }
+                
+                // No specific cooldownLeft for RMB beyond current charge
+                this.skillRMB.cooldownLeft = 0;
+
+
                 // --- Health Regeneration ---
                 this.health = clamp(this.health + this.healthRegen * deltaTime, -Infinity, this.maxHealth);
+
                 // --- Game Over ---
                 if (this.health <= 0 && !this.isDead) { this.isDead = true; endGame(); }
             }
@@ -787,17 +973,29 @@
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.angle);
+
+                // Player body (triangle/ship shape)
                 ctx.beginPath();
                 ctx.moveTo(this.radius, 0);
                 ctx.lineTo(-this.radius, -this.radius / 1.5);
                 ctx.lineTo(-this.radius, this.radius / 1.5);
                 ctx.closePath();
-                ctx.fillStyle = this.color; ctx.shadowBlur = 15; ctx.shadowColor = this.color; ctx.fill(); ctx.shadowBlur = 0;
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Engine glow
                 ctx.beginPath();
                 ctx.arc(-this.radius * 1.2, 0, this.radius * 0.8, -Math.PI / 2, Math.PI / 2, false);
-                ctx.fillStyle = `rgba(0, 255, 255, 0.7)`; ctx.shadowBlur = 20; ctx.shadowColor = COLOR_PLAYER; ctx.fill(); ctx.shadowBlur = 0;
+                ctx.fillStyle = `rgba(0, 255, 255, 0.7)`;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = COLOR_PLAYER;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
                 for (let i = 0; i < 2; i++) {
-                    // Use pool for particles
                     const particle = pool.getParticle();
                     particle.reset(this.x + Math.cos(this.angle + Math.PI) * this.radius * 1.2, this.y + Math.sin(this.angle + Math.PI) * this.radius * 1.2 + (i === 0 ? -this.radius / 3 : this.radius / 3), Math.cos(this.angle + Math.PI + (Math.random() - 0.5) * 0.5) * 100, Math.sin(this.angle + Math.PI + (Math.random() - 0.5) * 0.5) * 100, 2 + Math.random() * 3, 0.5 + Math.random() * 0.5, COLOR_PLAYER, `rgba(0, 255, 255, ${0.5 + Math.random() * 0.5})`);
                     particles.push(particle);
@@ -807,7 +1005,6 @@
 
             activateSkillQ() {
                 this.skillQ.lastUsed = performance.now();
-                // Target both enemies and missiles for Q skill
                 const potentialTargets = [...enemies, ...missiles].filter(e => e && !e.isDead && e.isActive); 
                 potentialTargets.sort((a, b) => dist(this.x, this.y, a.x, a.y) - dist(this.x, this.y, b.x, b.y));
                 let chainedTargets = []; let currentTarget = { x: this.x, y: this.y };
@@ -819,7 +1016,7 @@
                     }
                     if (nextTarget) {
                         lightningEffects.push({ x1: currentTarget.x, y1: currentTarget.y, x2: nextTarget.x, y2: nextTarget.y, lifetime: 0.2 });
-                        nextTarget.takeDamage(this.skillQ.damage); // Missiles will be destroyed by this
+                        nextTarget.takeDamage(this.skillQ.damage); 
                         chainedTargets.push(nextTarget); currentTarget = nextTarget;
                         potentialTargets.splice(nearestIndex, 1);
                     } else { break; }
@@ -828,30 +1025,18 @@
 
             activateSkillE() {
                 this.skillE.lastUsed = performance.now();
-                waveEffects.push({ x: this.x, y: this.y, radius: 0, maxRadius: this.skillE.radius, speed: this.skillE.radius / 0.3, alpha: 1 });
-                for (const enemy of enemies) {
-                    if (enemy.isDead) continue;
-                    if (dist(this.x, this.y, enemy.x, enemy.y) < this.skillE.radius) {
-                        enemy.takeDamage(this.skillE.damage);
-                        const angleToEnemy = Math.atan2(enemy.y - this.y, enemy.x - this.x);
-                        enemy.applyKnockback(Math.cos(angleToEnemy) * this.skillE.knockback, Math.sin(angleToEnemy) * this.skillE.knockback);
-                    }
-                }
-                // NEW: Also destroy missiles with wave
-                for (const missile of missiles) {
-                    if (!missile.isActive) continue;
-                    if (dist(this.x, this.y, missile.x, missile.y) < this.skillE.radius) {
-                        missile.takeDamage(this.skillE.damage);
-                    }
-                }
+                waveEffects.push({ 
+                    x: this.x, 
+                    y: this.y, 
+                    radius: 0, 
+                    maxRadius: this.skillE.radius, 
+                    speed: this.skillE.radius / 0.3, 
+                    alpha: 1,
+                    enemiesHit: new Set(),
+                    missilesHit: new Set() 
+                });
             }
-
-            activateSkillRMB() {
-                this.skillRMB.lastUsed = performance.now();
-                this.skillRMB.isActive = true; this.skillRMB.activeTimer = 0;
-                this.activeLaserEffect = new LaserEffect(this.x, this.y, this.x, this.y, COLOR_SKILL_RMB, 10, 1);
-            }
-
+            
             takeDamage(amount) {
                 this.health -= amount;
                 this.health = clamp(this.health, -Infinity, this.maxHealth);
@@ -862,8 +1047,14 @@
 
         class Enemy {
              constructor(type, x, y, hp, speed, radius, color, behavior, scoreValue) {
+                this.reset(type, x, y, hp, speed, radius, color, behavior, scoreValue);
+            }
+
+            reset(type, x, y, hp, speed, radius, color, behavior, scoreValue) {
                 this.type = type; this.x = x; this.y = y; this.initialHealth = hp;
-                this.health = hp; this.speed = speed; this.radius = radius; this.color = color;
+                // Directly use the provided 'hp' value from spawnEnemy, which is pre-scaled and overridden for Brute
+                this.health = hp; 
+                this.speed = speed; this.radius = radius; this.color = color;
                 this.behavior = behavior; this.scoreValue = scoreValue; this.isDead = false;
                 this.knockbackVelX = 0; this.knockbackVelY = 0; this.knockbackFriction = 0.9;
                 this.oscillationTimer = Math.random() * Math.PI * 2; this.isActive = true;
@@ -913,7 +1104,6 @@
             explode() {
                 const numParticles = 20 + Math.random() * 10;
                 for (let i = 0; i < numParticles; i++) {
-                    // Use pool for particles
                     const particle = pool.getParticle();
                     const angle = Math.random() * Math.PI * 2; const speed = 100 + Math.random() * 300;
                     const size = 3 + Math.random() * 5; const lifetime = 0.5 + Math.random() * 0.5;
@@ -928,59 +1118,58 @@
             }
         }
         
-        // NEW: Boss Class
         class Boss {
             constructor() {
                 this.x = CANVAS_WIDTH / 2;
-                this.y = -150; // Start off-screen
+                this.y = -150; 
                 this.targetY = 150;
                 this.width = 400;
                 this.height = 120;
-                this.health = BOSS_HEALTH_BASE * (1 + (currentWave / BOSS_WAVE_INTERVAL - 1) * 0.5); // Scale health for later boss waves
+                this.health = BOSS_HEALTH_BASE * (1 + (currentWave / BOSS_WAVE_INTERVAL - 1) * 0.5); 
                 this.initialHealth = this.health;
                 this.speed = BOSS_SPEED;
-                this.moveDirection = 1; // 1 for right, -1 for left
+                this.moveDirection = 1; 
                 this.isDead = false;
                 this.isActive = true;
                 this.lastMissileFireTime = 0;
                 this.scoreValue = BOSS_SCORE_VALUE * (currentWave / BOSS_WAVE_INTERVAL);
-                // Weapon pod positions relative to boss center
                 this.weaponPods = [
                     { x: -this.width / 3, y: this.height / 2 - 10 }, 
                     { x: this.width / 3, y: this.height / 2 - 10 }
                 ];
+                this.shieldFlashTimer = 0; 
             }
 
             update(deltaTime) {
                 if (this.isDead) return;
 
-                // Entrance animation
                 if (this.y < this.targetY) {
-                    this.y += 100 * deltaTime; // Move down
-                    return; // Don't move or shoot during entrance
+                    this.y += 100 * deltaTime; 
+                    return; 
                 }
                 
-                // Side-to-side movement
                 this.x += this.speed * this.moveDirection * deltaTime;
-                // Reverse direction if hitting canvas edges
                 if (this.x + this.width / 2 > CANVAS_WIDTH || this.x - this.width / 2 < 0) {
                     this.moveDirection *= -1;
-                    // Clamp to ensure it stays within bounds precisely
                     this.x = clamp(this.x, this.width / 2, CANVAS_WIDTH - this.width / 2);
                 }
 
-                // Fire missiles
                 if (performance.now() - this.lastMissileFireTime > 1000 / BOSS_MISSILE_FIRE_RATE) {
                     this.fireMissile();
                     this.lastMissileFireTime = performance.now();
                 }
+
+                // Update shield flash timer
+                if (this.shieldFlashTimer > 0) {
+                    this.shieldFlashTimer -= deltaTime * 1000;
+                    if (this.shieldFlashTimer < 0) this.shieldFlashTimer = 0;
+                }
             }
 
             fireMissile() {
-                // FIX: Correctly pick a random pod from the array
                 const pod = this.weaponPods[Math.floor(Math.random() * this.weaponPods.length)]; 
                 
-                const newMissile = pool.getMissile(); // Use object pool
+                const newMissile = pool.getMissile(); 
                 newMissile.reset(this.x + pod.x, this.y + pod.y);
                 missiles.push(newMissile);
             }
@@ -988,7 +1177,7 @@
             draw(ctx) {
                 if (!this.isActive) return;
                 
-                // Main Body (e.g., a large rectangular base)
+                // Main Body 
                 ctx.fillStyle = COLOR_BOSS_BODY;
                 ctx.shadowColor = COLOR_BOSS_CORE;
                 ctx.shadowBlur = 20;
@@ -996,48 +1185,59 @@
 
                 // Armor plates / Details
                 ctx.fillStyle = COLOR_BOSS_ARMOR;
-                // Top armor strip
                 ctx.fillRect(this.x - this.width / 2, this.y - this.height / 2, this.width, this.height * 0.2);
-                // Bottom armor strip
                 ctx.fillRect(this.x - this.width / 2, this.y + this.height / 2 - this.height * 0.2, this.width, this.height * 0.2);
-                // Central horizontal strip
                 ctx.fillRect(this.x - this.width / 2 + 20, this.y - 10, this.width - 40, 20);
 
-                // Core (central weak point, glowing)
+                // Core 
                 const coreRadius = 25 + Math.sin(performance.now() / 300) * 5; // Pulsating effect
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, coreRadius, 0, Math.PI * 2);
                 ctx.fillStyle = COLOR_BOSS_CORE;
                 ctx.fill();
                 
-                // Weapon Pods (small rectangles on the sides)
+                // Weapon Pods 
                 this.weaponPods.forEach(pod => {
                     ctx.fillStyle = COLOR_BOSS_ARMOR;
                     ctx.beginPath();
-                    // Draw a small square for the pod
                     ctx.fillRect(this.x + pod.x - 15, this.y + pod.y - 15, 30, 30);
-                    // Add a small emitter effect (visual only)
                     ctx.fillStyle = COLOR_MISSILE_TRAIL;
                     ctx.fillRect(this.x + pod.x - 5, this.y + pod.y + 15, 10, 10);
                 });
                 
-                ctx.shadowBlur = 0; // Reset shadow after drawing glowing parts
+                // Draw shield flash effect if active
+                if (this.shieldFlashTimer > 0) {
+                    ctx.save();
+                    const flashAlpha = clamp(this.shieldFlashTimer / BOSS_SHIELD_FLASH_DURATION * 0.6, 0, 0.6); 
+                    ctx.globalAlpha = flashAlpha;
+                    ctx.strokeStyle = COLOR_BOSS_SHIELD_FLASH;
+                    ctx.lineWidth = 5; 
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = COLOR_BOSS_SHIELD_FLASH;
+                    
+                    ctx.beginPath();
+                    ctx.rect(this.x - this.width / 2 - 5, this.y - this.height / 2 - 5, this.width + 10, this.height + 10);
+                    ctx.stroke();
+
+                    ctx.restore();
+                }
+                
+                ctx.shadowBlur = 0; 
 
                 // Health bar
                 const healthBarWidth = this.width;
                 const healthBarHeight = 10;
                 const healthBarX = this.x - this.width / 2;
-                const healthBarY = this.y - this.height / 2 - 25; // Above the boss
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Background for health bar
+                const healthBarY = this.y - this.height / 2 - 25; 
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; 
                 ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
-                ctx.fillStyle = 'rgba(255, 0, 0, 1)'; // Current health
+                ctx.fillStyle = 'rgba(255, 0, 0, 1)'; 
                 ctx.fillRect(healthBarX, healthBarY, healthBarWidth * (this.health / this.initialHealth), healthBarHeight);
             }
 
-            takeDamage(amount) {
+            takeDamage(amount) { // This method is for skill damage only
                 if (this.isDead) return;
                 this.health -= amount;
-                // Add a screen shake effect when boss is hit
                 canvas.style.transform = `translate(${Math.random() * 8 - 4}px, ${Math.random() * 8 - 4}px)`;
                 setTimeout(() => canvas.style.transform = '', 70);
 
@@ -1048,11 +1248,23 @@
                     this.explode();
                 }
             }
+            
+            // Method for regular bullet hits
+            takeBulletHit(hitX, hitY) {
+                // BOSS takes no damage from regular bullets, but flashes shield
+                this.shieldFlashTimer = BOSS_SHIELD_FLASH_DURATION; 
+                
+                // Generate a "shield particle" at the hit location
+                const particle = pool.getParticle();
+                particle.reset(hitX, hitY, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 50, 
+                               10 + Math.random() * 5, 0.2, COLOR_PLAYER_BULLET, COLOR_BOSS_SHIELD_FLASH);
+                particles.push(particle);
+            }
 
             explode() {
-                const numParticles = 200; // More particles for a boss explosion
+                const numParticles = 200; 
                 for (let i = 0; i < numParticles; i++) {
-                    const particle = pool.getParticle(); // Use object pool
+                    const particle = pool.getParticle(); 
                     const angle = Math.random() * Math.PI * 2;
                     const speed = 200 + Math.random() * 600;
                     const size = 5 + Math.random() * 10;
@@ -1063,16 +1275,14 @@
                     particle.reset(spawnX, spawnY, Math.cos(angle) * speed, Math.sin(angle) * speed, size, lifetime, color, color);
                     particles.push(particle);
                 }
-                // Larger screen shake for boss death
                 canvas.style.transform = `translate(${Math.random() * 15 - 7.5}px, ${Math.random() * 15 - 7.5}px)`;
                 setTimeout(() => canvas.style.transform = '', 150);
             }
         }
 
-        // NEW: Missile class
         class Missile {
-            constructor(x, y) {
-                this.reset(x, y); // Initialize via reset method
+            constructor() { 
+                this.reset(0, 0); 
             }
 
             reset(x, y) {
@@ -1080,18 +1290,16 @@
                 this.y = y;
                 this.radius = 8;
                 this.speed = MISSILE_SPEED;
-                this.angle = -Math.PI / 2; // Initial angle (e.g., pointing down from boss)
+                this.angle = -Math.PI / 2; 
                 this.isActive = true;
-                this.isDead = false; // For compatibility with Q skill targeting
+                this.isDead = false; 
             }
 
             update(deltaTime) {
                 if (!this.isActive) return;
-                // Homing logic: gradually turn towards the player
                 if (player && !player.isDead) {
                     const targetAngle = Math.atan2(player.y - this.y, player.x - this.x);
                     let angleDiff = targetAngle - this.angle;
-                    // Normalize angle difference to be within -PI to PI
                     while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
                     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
                     this.angle += clamp(angleDiff, -MISSILE_TURN_RATE * deltaTime, MISSILE_TURN_RATE * deltaTime);
@@ -1100,15 +1308,12 @@
                 this.x += Math.cos(this.angle) * this.speed * deltaTime;
                 this.y += Math.sin(this.angle) * this.speed * deltaTime;
 
-                // Particle trail for missile
-                const particle = pool.getParticle(); // Use object pool
-                // Particles shoot backwards, slightly varied angle
+                const particle = pool.getParticle(); 
                 const trailAngle = this.angle + Math.PI + (Math.random() - 0.5) * 0.8; 
                 particle.reset(this.x, this.y, Math.cos(trailAngle) * 50, Math.sin(trailAngle) * 50, 
                                5 + Math.random() * 3, 0.4, COLOR_MISSILE_TRAIL, COLOR_MISSILE_TRAIL);
                 particles.push(particle);
 
-                // Despawn if it goes way off screen
                 if (this.x < -100 || this.x > CANVAS_WIDTH + 100 || this.y < -100 || this.y > CANVAS_HEIGHT + 100) {
                     this.isActive = false;
                 }
@@ -1120,10 +1325,9 @@
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.angle);
                 ctx.beginPath();
-                // Missile shape (triangle)
-                ctx.moveTo(this.radius * 1.5, 0); // Point
-                ctx.lineTo(-this.radius, -this.radius / 2); // Left base
-                ctx.lineTo(-this.radius, this.radius / 2); // Right base
+                ctx.moveTo(this.radius * 1.5, 0); 
+                ctx.lineTo(-this.radius, -this.radius / 2); 
+                ctx.lineTo(-this.radius, this.radius / 2); 
                 ctx.closePath();
                 ctx.fillStyle = COLOR_MISSILE;
                 ctx.shadowColor = COLOR_MISSILE;
@@ -1133,17 +1337,17 @@
                 ctx.shadowBlur = 0;
             }
 
-            takeDamage(amount) { // Amount doesn't matter, any skill damage destroys it
+            takeDamage(amount) { 
                 if (!this.isActive) return;
                 this.isActive = false;
-                this.isDead = true; // For Q skill
+                this.isDead = true; 
                 this.explode();
             }
 
             explode() {
                 const numParticles = 15;
                 for (let i = 0; i < numParticles; i++) {
-                    const particle = pool.getParticle(); // Use object pool
+                    const particle = pool.getParticle(); 
                     const angle = Math.random() * Math.PI * 2;
                     const speed = 50 + Math.random() * 150;
                     const size = 2 + Math.random() * 3;
@@ -1155,8 +1359,8 @@
         }
 
         class Projectile {
-             constructor(x, y, velX, velY, speed, damage, owner) {
-                this.reset(x, y, velX, velY, speed, damage, owner); // Initialize via reset method
+             constructor() {
+                this.reset(0, 0, 0, 0, 0, 0, ''); 
             }
             
             reset(x, y, velX, velY, speed, damage, owner) {
@@ -1179,7 +1383,7 @@
                 ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fillStyle = this.color; ctx.shadowBlur = 15; ctx.shadowColor = this.color; ctx.fill(); ctx.shadowBlur = 0;
                 if (this.owner === 'player') {
-                    const particle = pool.getParticle(); // Use object pool
+                    const particle = pool.getParticle(); 
                     particle.reset(this.x - this.velX * deltaTime * 5, this.y - this.velY * deltaTime * 5, -this.velX * 0.1, -this.velY * 0.1, 2 + Math.random() * 2, 0.2 + Math.random() * 0.2, COLOR_PLAYER, `rgba(0, 255, 255, ${0.4 + Math.random() * 0.4})`);
                     particles.push(particle);
                 }
@@ -1187,8 +1391,8 @@
         }
 
         class Particle {
-            constructor(x, y, velX, velY, size, lifetime, color, glowColor) {
-                this.reset(x, y, velX, velY, size, lifetime, color, glowColor); // Initialize via reset method
+            constructor() {
+                this.reset(0, 0, 0, 0, 0, 0, '', ''); 
             }
 
             reset(x, y, velX, velY, size, lifetime, color, glowColor) {
@@ -1274,32 +1478,51 @@
             resumeGameBtn.addEventListener('click', resumeGame);
             exitGameBtn.addEventListener('click', endGame);
             document.addEventListener('keydown', (e) => {
-                keys[e.key.toLowerCase()] = true;
-                if (e.key.toLowerCase() === 'p' || e.key === 'escape') {
-                    if (gameRunning && !player.isDead) { if (gamePaused) resumeGame(); else pauseGame(); }
+                const key = e.key.toLowerCase();
+                keys[key] = true; // Mark key as currently held down
+                
+                // Pause game on 'p' or 'escape'
+                if (key === 'p' || key === 'escape') {
+                    if (gameRunning && !player.isDead) { 
+                        if (gamePaused) resumeGame(); 
+                        else pauseGame(); 
+                    }
                 }
             });
-            document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+            document.addEventListener('keyup', (e) => {
+                const key = e.key.toLowerCase();
+                keys[key] = false; // Mark key as released
+            });
+
             canvas.addEventListener('mousemove', (e) => { const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; });
             canvas.addEventListener('mousedown', (e) => { if (e.button === 0) mouse.leftPressed = true; if (e.button === 2) mouse.rightPressed = true; });
-            canvas.addEventListener('mouseup', (e) => { if (e.button === 0) mouse.leftPressed = false; if (e.button === 2) mouse.rightPressed = false; });
+            canvas.addEventListener('mouseup', (e) => { 
+                if (e.button === 0) mouse.leftPressed = false; 
+                if (e.button === 2) { 
+                    mouse.rightPressed = false;
+                    canvas.style.transform = ''; // Reset screen shake after releasing RMB
+                } 
+            });
             canvas.addEventListener('contextmenu', (e) => e.preventDefault());
             createStars();
         }
 
         function startGame() {
             player = new Player();
-            updatePlayerStatsFromUpgrades();
+            updatePlayerStatsFromUpgrades(); 
+            
             enemies = []; 
+            missiles = [];
+            boss = null;
+
             playerProjectiles = []; 
             particles = [];
             lightningEffects = []; 
-            waveEffects = []; 
-            missiles = [];
-            player.activeLaserEffect = null; 
-            boss = null;
+            waveEffects = [];
+            player.activeLaserEffect = null;
+
             currentScore = 0; 
-            currentWave = 0; // Will be incremented to 1 by startNextWave
+            currentWave = 0; 
             enemiesSpawnedThisWave = 0;
             lastEnemySpawnTime = 0; 
             waveTextDisplayTime = performance.now();
@@ -1331,35 +1554,45 @@
             lastEnemySpawnTime = 0;
             waveTextDisplayTime = performance.now();
             
-            // Clear any remaining entities from previous wave
+            enemies.forEach(e => e.isDead = true); 
             enemies = []; 
+            missiles.forEach(m => m.isActive = false); 
             missiles = []; 
-            playerProjectiles = []; // Clear player bullets too
-            lightningEffects = [];
-            waveEffects = [];
-            player.activeLaserEffect = null;
-
+            if (boss) {
+                boss.isDead = true; 
+                boss = null;
+            }
 
             if (currentWave % BOSS_WAVE_INTERVAL === 0) {
                 isBossWave = true;
                 boss = new Boss();
-                enemiesInWave = 1; // The boss is the only "enemy"
+                enemiesInWave = 1; 
             } else {
                 isBossWave = false;
-                boss = null; // Ensure no boss exists
+                boss = null; 
                 enemiesInWave = WAVE_INITIAL_ENEMY_COUNT + (currentWave - 1) * WAVE_ENEMY_COUNT_PER_WAVE;
             }
         }
 
         function spawnEnemy() {
-            if (enemiesSpawnedThisWave >= enemiesInWave || isBossWave) return; // Don't spawn if boss wave
+            if (enemiesSpawnedThisWave >= enemiesInWave || isBossWave) return; 
             const enemyChoices = [];
+            // The Brute's base HP definition here is just for type matching in 'def'.
+            // The actual *effective* base HP of 400 or 2000 is applied below when creating the enemy.
             if (currentWave >= 1) enemyChoices.push({ type: 'Grunt', hp: 15, speed: 120, radius: 10, color: COLOR_ENEMY_GRUNT, behavior: 'chase_oscillate', score: 10 });
             if (currentWave >= 2) enemyChoices.push({ type: 'Scout', hp: 10, speed: 200, radius: 12, color: COLOR_ENEMY_SCOUT, behavior: 'chase_oscillate', score: 15 });
             if (currentWave >= 4) enemyChoices.push({ type: 'Brute', hp: 40, speed: 80, radius: 25, color: COLOR_ENEMY_BRUTE, behavior: 'chase_direct', score: 30 });
             const def = enemyChoices[Math.floor(Math.random() * enemyChoices.length)];
-            let hp = def.hp * (1 + (currentWave - 1) * WAVE_ENEMY_HP_SCALING);
+            
+            let hp = def.hp; // Get base HP from definition
+            if (def.type === 'Brute') {
+                hp = 500; // Directly apply the 10x original *new* value for Brute's effective base HP before wave scaling
+            }
+
+            hp *= (1 + (currentWave - 1) * WAVE_ENEMY_HP_SCALING); // Apply wave scaling on top of (possibly modified) base HP
+            
             let speed = def.speed * (1 + (currentWave - 1) * WAVE_ENEMY_SPEED_SCALING);
+
             let x, y;
             const side = Math.floor(Math.random() * 4);
             if (side === 0) { x = Math.random() * CANVAS_WIDTH; y = -ENEMY_SPAWN_OFFSET; } 
@@ -1377,12 +1610,11 @@
                 if (!proj.isActive) continue;
 
                 if (isBossWave && boss && !boss.isDead) {
-                    // Collision with boss
                     if (proj.x > boss.x - boss.width / 2 && proj.x < boss.x + boss.width / 2 && proj.y > boss.y - boss.height / 2 && proj.y < boss.y + boss.height / 2) {
-                        boss.takeDamage(proj.damage); 
-                        pool.returnProjectile(proj); // Return projectile to pool
-                        playerProjectiles.splice(i, 1); // Remove from active list
-                        continue; // Skip further checks for this projectile
+                        boss.takeBulletHit(proj.x, proj.y); 
+                        pool.returnProjectile(proj); 
+                        playerProjectiles.splice(i, 1); 
+                        continue; 
                     }
                 } else {
                     for (let j = enemies.length - 1; j >= 0; j--) {
@@ -1390,9 +1622,9 @@
                         if (enemy.isDead) continue;
                         if (dist(proj.x, proj.y, enemy.x, enemy.y) < proj.radius + enemy.radius) {
                             enemy.takeDamage(proj.damage); 
-                            pool.returnProjectile(proj); // Return projectile to pool
-                            playerProjectiles.splice(i, 1); // Remove from active list
-                            break; // Stop checking enemies for this projectile
+                            pool.returnProjectile(proj); 
+                            playerProjectiles.splice(i, 1); 
+                            break; 
                         }
                     }
                 }
@@ -1404,9 +1636,7 @@
                     const missile = missiles[i];
                     if (!missile.isActive) continue;
                     if (dist(player.x, player.y, missile.x, missile.y) < player.radius + missile.radius) {
-                        player.takeDamage(MISSILE_DAMAGE); 
-                        missile.takeDamage(999); // Destroy missile
-                        // Missile is removed from list by filter in gameLoop
+                        player.takeDamage(MISSILE_DAMAGE); missile.takeDamage(999); 
                     }
                  }
             } else {
@@ -1421,38 +1651,50 @@
                 }
             }
             
-            // Laser Beam vs Enemy/Boss/Missile
+            // Laser Beam hit effects (damage application handled in Player.update)
             if (player.skillRMB.isActive && player.activeLaserEffect) {
                 const { x1, y1, x2, y2 } = player.activeLaserEffect;
                 const lineLengthSq = (x2 - x1)**2 + (y2 - y1)**2;
                 if (lineLengthSq === 0) return; 
 
-                // Determine targets based on wave type
                 const targets = [];
                 if (isBossWave) {
                     if (boss && !boss.isDead) targets.push(boss);
-                    targets.push(...missiles); // Add all missiles
+                    targets.push(...missiles); 
                 } else {
-                    targets.push(...enemies); // Add all enemies
+                    targets.push(...enemies); 
                 }
 
                 for (let i = targets.length - 1; i >= 0; i--) {
                     const target = targets[i]; 
-                    if (!target || !target.isActive) continue; // Ensure target is valid and active
+                    if (!target || !target.isActive) continue; 
 
                     let radius;
                     if (target instanceof Missile) radius = target.radius;
-                    else if (target instanceof Boss) radius = target.width / 2; // Approximate collision for boss
+                    else if (target instanceof Boss) radius = target.width / 2; 
                     else radius = target.radius;
 
                     let t = ((target.x - x1) * (x2 - x1) + (target.y - y1) * (y2 - y1)) / lineLengthSq;
-                    t = Math.max(0, Math.min(1, t)); // Clamp to line segment
+                    t = Math.max(0, Math.min(1, t)); 
                     const closestX = x1 + t * (x2 - x1); 
                     const closestY = y1 + t * (y2 - y1);
                     
                     if (dist(closestX, closestY, target.x, target.y) < radius + player.activeLaserEffect.width / 2) {
-                        if (target instanceof Missile) target.takeDamage(999); // Destroy missile instantly
-                        else target.takeDamage(player.skillRMB.damagePerFrame * deltaTime * 60); // Apply damage over time
+                        if (target instanceof Missile) {
+                             target.takeDamage(999); 
+                        } else if (target instanceof Boss || target instanceof Enemy) { 
+                                const numParticles = 2 + Math.random() * 3;
+                                for (let k = 0; k < numParticles; k++) {
+                                    const particle = pool.getParticle();
+                                    const angle = Math.random() * Math.PI * 2;
+                                    const speed = 50 + Math.random() * 100;
+                                    const size = 3 + Math.random() * 6;
+                                    const lifetime = 0.2 + Math.random() * 0.3;
+                                    const color = COLOR_SKILL_RMB; 
+                                    particle.reset(closestX, closestY, Math.cos(angle) * speed, Math.sin(angle) * speed, size, lifetime, color, color);
+                                    particles.push(particle);
+                                }
+                            }
                     }
                 }
             }
@@ -1470,7 +1712,7 @@
                 if (boss) boss.update(deltaTime);
                 missiles = missiles.filter(m => { 
                     m.update(deltaTime); 
-                    if (!m.isActive) pool.returnMissile(m); // Return to pool
+                    if (!m.isActive) pool.returnMissile(m); 
                     return m.isActive; 
                 });
             } else {
@@ -1483,23 +1725,60 @@
 
             // Check wave completion condition
             if ((isBossWave && boss && boss.isDead) || (!isBossWave && enemies.length === 0 && enemiesSpawnedThisWave >= enemiesInWave)) {
-                if (isBossWave && boss) boss = null; // Clear the dead boss
+                if (isBossWave && boss) boss = null; 
                 startNextWave();
             }
 
             playerProjectiles = playerProjectiles.filter(proj => { 
                 proj.update(deltaTime); 
-                if (!proj.isActive) pool.returnProjectile(proj); // Return to pool
+                if (!proj.isActive) pool.returnProjectile(proj); 
                 return proj.isActive; 
             });
             particles = particles.filter(p => { 
                 p.update(deltaTime); 
-                if (!p.isActive) pool.returnParticle(p); // Return to pool
+                if (!p.isActive) pool.returnParticle(p); 
                 return p.isActive; 
             });
 
             lightningEffects = lightningEffects.filter(e => { e.lifetime -= deltaTime; return e.lifetime > 0; });
-            waveEffects = waveEffects.filter(e => { e.radius += e.speed * deltaTime; e.alpha = 1 - (e.radius / e.maxRadius); return e.radius < e.maxRadius; });
+            
+            // === Wave Effect (E Skill) Logic - now applies damage based on expansion ===
+            waveEffects = waveEffects.filter(e => { 
+                const previousRadius = e.radius; 
+                e.radius += e.speed * deltaTime; 
+                e.alpha = 1 - (e.radius / e.maxRadius); 
+
+                const allTargets = [];
+                if (isBossWave) {
+                    if (boss && !boss.isDead) allTargets.push(boss);
+                    allTargets.push(...missiles);
+                } else {
+                    allTargets.push(...enemies);
+                }
+
+                for (const target of allTargets) {
+                    // Check if target is valid, active, and has NOT been hit by THIS wave instance yet
+                    if (target && !target.isDead && target.isActive && !e.enemiesHit.has(target)) {
+                        const distanceToWaveCenter = dist(e.x, e.y, target.x, target.y);
+                        
+                        // Detect if the wave's expanding edge JUST crossed the target
+                        if (distanceToWaveCenter <= e.radius && distanceToWaveCenter > previousRadius) {
+                            if (target instanceof Missile) {
+                                target.takeDamage(999); 
+                            } else { 
+                                target.takeDamage(player.skillE.damage);
+                                if (target instanceof Enemy) { 
+                                    const angleToEnemy = Math.atan2(target.y - e.y, target.x - e.x);
+                                    target.applyKnockback(Math.cos(angleToEnemy) * player.skillE.knockback, Math.sin(angleToEnemy) * player.skillE.knockback);
+                                }
+                            }
+                            e.enemiesHit.add(target); 
+                        }
+                    }
+                }
+                return e.radius < e.maxRadius; 
+            });
+
             checkCollisions();
 
             // --- Drawing ---
@@ -1533,7 +1812,11 @@
                 ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.stroke();
                 ctx.shadowBlur = 0; ctx.globalAlpha = 1;
             });
-            if (player.activeLaserEffect) player.activeLaserEffect.draw(ctx);
+
+            if (player.activeLaserEffect) {
+                player.activeLaserEffect.draw(ctx);
+            }
+
 
             // Draw Wave Announcement / BOSS WARNING
             if (performance.now() - waveTextDisplayTime < WAVE_TEXT_DURATION) {
